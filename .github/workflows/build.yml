@@ -48,10 +48,19 @@ jobs:
           STIHNU_KEY_PASSWORD: ${{ secrets.STIHNU_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          if [ -n "${STIHNU_KEYSTORE:-}" ]; then
-            ./gradlew --no-daemon assembleRelease
-          else
-            ./gradlew --no-daemon assembleDebug
+          TASK=assembleDebug
+          if [ -n "${STIHNU_KEYSTORE:-}" ]; then TASK=assembleRelease; fi
+          set +e
+          ./gradlew --no-daemon --console=plain "$TASK" > build.log 2>&1
+          rc=$?
+          set -e
+          cat build.log
+          if [ $rc -ne 0 ]; then
+            # Surface the real error as an annotation, so it is visible
+            # without opening the full log.
+            msg=$(grep -E "^e: |error:|What went wrong|Could not|> |FAILURE|Caused by" build.log | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Gradle build failed::${msg}"
+            exit $rc
           fi
 
       - uses: actions/upload-artifact@v4
