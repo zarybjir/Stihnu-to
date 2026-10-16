@@ -63,7 +63,7 @@ object WidgetUpdater {
         }
         if (force) renderAll(c, "načítám…")
 
-        val stops = ids.mapNotNull { Store.card(c, Store.widgetCard(c, it))?.stopName }.distinct()
+        val stops = ids.toList().mapNotNull { Store.card(c, Store.widgetCard(c, it))?.stopName }.distinct()
         val now = System.currentTimeMillis()
         var error: String? = null
         for (stop in stops) {
