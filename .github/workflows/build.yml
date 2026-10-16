@@ -1,0 +1,66 @@
+# Volitelné: sestavení APK na GitHubu. Bez nastavených secrets vznikne debug
+# APK (podepsaná náhodným klíčem běžce — aktualizace přes ni nepůjde
+# nainstalovat přes starou verzi). Se secrets vznikne podepsaná release APK.
+#
+# Secrets (Settings > Secrets and variables > Actions):
+#   STIHNU_KEYSTORE_B64       base64 souboru .jks  (base64 -w0 release.jks)
+#   STIHNU_KEYSTORE_PASSWORD
+#   STIHNU_KEY_ALIAS
+#   STIHNU_KEY_PASSWORD
+#
+# Tag "v1.0.1" navíc vytvoří GitHub Release s APK — z toho umí aktualizovat Obtainium.
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KS_B64: ${{ secrets.STIHNU_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Keystore
+        if: env.KS_B64 != ''
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "STIHNU_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          STIHNU_KEYSTORE_PASSWORD: ${{ secrets.STIHNU_KEYSTORE_PASSWORD }}
+          STIHNU_KEY_ALIAS: ${{ secrets.STIHNU_KEY_ALIAS }}
+          STIHNU_KEY_PASSWORD: ${{ secrets.STIHNU_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          if [ -n "${STIHNU_KEYSTORE:-}" ]; then
+            ./gradlew --no-daemon assembleRelease
+          else
+            ./gradlew --no-daemon assembleDebug
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stihnu-to-apk
+          path: app/build/outputs/apk/**/*.apk
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/**/*.apk

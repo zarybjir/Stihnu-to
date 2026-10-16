@@ -1,0 +1,2078 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#121820" />
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stihnu to?">
+<title>Stihnu to?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#121820;
+    --surface:#1B2530;
+    --surface-2:#222E3A;
+    --border:#2C3948;
+    --text:#F1EDE4;
+    --text-muted:#8A94A0;
+    --accent:#4FB8A9;
+    --accent-dim:#338075;
+    --ok:#5FBE83;
+    --tight:#E3A23E;
+    --miss:#E5626B;
+    --radius:10px;
+    --font-ui:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+    /* Tells the browser to render native controls (time picker, spinners,
+       scrollbars) in dark form instead of the default white. */
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  /* The hidden attribute must always win over any other display rule below. */
+  [hidden]{ display:none !important; }
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-ui);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior-y:none;
+  }
+  a{color:var(--accent);}
+  button{font-family:inherit;}
+  input{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  .app{
+    max-width:480px;
+    margin:0 auto;
+    padding:calc(14px + env(safe-area-inset-top)) 0 calc(20px + env(safe-area-inset-bottom));
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 16px;}
+  .brand{display:flex;align-items:center;gap:8px;}
+  .brand-mark{font-size:22px;color:var(--accent);}
+  .brand h1{font-size:19px;margin:0;font-weight:800;letter-spacing:-0.01em;}
+  .icon-btn{
+    background:var(--surface);
+    border:1px solid var(--border);
+    color:var(--text);
+    width:38px;height:38px;border-radius:10px;
+    font-size:16px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    flex:0 0 auto;
+  }
+  .icon-btn.small{width:30px;height:30px;font-size:13px;border-radius:8px;}
+  .icon-btn:active{transform:scale(0.96);}
+  .icon-btn:disabled{opacity:0.4;}
+  .link-btn{
+    background:none;border:none;color:var(--accent);
+    font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:4px 0;
+  }
+
+  .empty-state{
+    margin:0 16px;
+    text-align:center;color:var(--text-muted);font-size:13.5px;
+    padding:14px 14px;border:1px dashed var(--border);border-radius:10px;
+  }
+
+  /* ---- Card deck ---- */
+  .deck{
+    display:flex;
+    gap:14px;
+    overflow-x:auto;
+    scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;
+    padding:4px 16px 10px;
+  }
+  .deck::-webkit-scrollbar{display:none;}
+  .card{
+    flex:0 0 88%;
+    scroll-snap-align:center;
+    background:linear-gradient(180deg,var(--surface),var(--surface-2));
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    min-height:280px;
+  }
+  .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+  .card-title{font-size:17px;font-weight:800;line-height:1.2;}
+  .card-sub{font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px;}
+  .card-actions{display:flex;gap:6px;flex:0 0 auto;}
+
+  .dot-row{display:flex;justify-content:center;gap:6px;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--border);}
+  .dot.active{background:var(--accent);}
+
+  /* Colored line chip — the line number is the main visual anchor. */
+  .line-chip{
+    font-family:var(--font-mono);
+    font-weight:800;
+    color:#fff;
+    background:var(--line-color,var(--accent));
+    border-radius:7px;
+    padding:3px 9px;
+    font-size:15px;
+    line-height:1.25;
+    flex:0 0 auto;
+    letter-spacing:0.01em;
+  }
+  .line-chip.xl{font-size:24px;padding:5px 13px;border-radius:9px;}
+  .line-chip.sm{font-size:13px;padding:2px 7px;}
+
+  /* First (next) departure — biggest, direction sits beside the time. */
+  .dep-first{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding-bottom:4px;
+  }
+  .dep-first-min{
+    font-family:var(--font-mono);font-size:38px;font-weight:800;line-height:1;
+    color:var(--urgency,var(--text));
+  }
+  .dep-first-min .unit{font-size:14px;font-weight:600;color:var(--text-muted);margin-left:3px;}
+  .dep-first-dir{
+    font-size:14px;color:var(--text-muted);
+    flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+
+  .dep-rows{display:flex;flex-direction:column;gap:7px;margin-top:2px;}
+  /* The detail panel now sits inside the departure list, directly under
+     the departure it describes. */
+  .dep-rows .dep-detail{margin:1px 0 4px;}
+  .dep-row{
+    display:flex;align-items:center;gap:10px;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+    padding:8px 11px;font-size:14px;
+  }
+  /* Departures within the next 15 minutes stay large and readable. */
+  .dep-row.soon{padding:10px 12px;font-size:16px;}
+  .dep-row.soon .line-chip{font-size:16px;padding:3px 10px;}
+  .dep-row.soon .dep-min{font-size:17px;}
+  .dep-dir{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted);}
+  .dep-min{font-family:var(--font-mono);font-weight:700;white-space:nowrap;}
+  .delay-badge{
+    font-family:var(--font-mono);font-size:11.5px;font-weight:700;
+    white-space:nowrap;flex:0 0 auto;
+  }
+  .dep-first,.dep-row{cursor:pointer;}
+  .dep-row:active{border-color:var(--line-color,var(--accent));}
+
+  .dep-detail{
+    background:var(--surface-2);
+    border:1px solid var(--line-color,var(--border));
+    border-radius:10px;padding:11px 12px;
+    display:flex;flex-direction:column;gap:9px;
+  }
+  .dep-detail-head{display:flex;align-items:center;gap:9px;}
+  .dep-detail-dir{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:600;}
+  .detail-grid{
+    display:grid;grid-template-columns:auto 1fr;gap:5px 12px;
+    font-size:12.5px;color:var(--text-muted);
+  }
+  .detail-grid .mono{color:var(--text);text-align:right;font-family:var(--font-mono);}
+  .detail-link{font-size:12.5px;font-weight:600;text-decoration:none;}
+  .route-list{
+    display:flex;flex-direction:column;
+    max-height:44vh;overflow-y:auto;
+    padding:2px 0;
+  }
+  .route-stop{
+    display:flex;align-items:center;gap:10px;
+    font-size:13px;position:relative;
+    padding:5px 0 5px 2px;
+  }
+  /* Vertical spine connecting the stops. */
+  .route-stop::before{
+    content:"";position:absolute;left:5px;top:0;bottom:0;
+    width:2px;background:var(--line-color,var(--accent));opacity:0.45;
+  }
+  .route-stop.last::before{bottom:50%;}
+  .route-stop:first-child::before{top:50%;}
+  .route-dot{
+    width:10px;height:10px;border-radius:50%;
+    background:var(--line-color,var(--accent));
+    flex:0 0 auto;position:relative;z-index:1;
+    box-shadow:0 0 0 2px var(--surface-2);
+  }
+  .route-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .route-time{font-size:12px;color:var(--text-muted);white-space:nowrap;}
+  /* Stops before the one you board at — de-emphasised. */
+  .route-stop.before{opacity:0.4;}
+  .route-stop.before .route-dot{background:var(--text-muted);}
+  /* Your boarding stop. */
+  .route-stop.board .route-name{font-weight:800;color:var(--text);}
+  .route-stop.board .route-dot{
+    width:14px;height:14px;margin-left:-2px;
+    border:3px solid var(--bg);
+  }
+  /* Where the vehicle currently is. */
+  .route-stop.vehicle .route-dot{
+    background:var(--text);
+    box-shadow:0 0 0 3px var(--line-color,var(--accent));
+  }
+  .route-stop.vehicle .route-name{color:var(--text);}
+  .route-stop.vehicle.before{opacity:1;}
+  .route-flag{font-size:11px;color:var(--line-color,var(--accent));font-weight:700;}
+
+  /* Line picker — tappable colored chips, no checkboxes. */
+  .line-picker{
+    display:flex;flex-wrap:wrap;gap:7px;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:10px;
+    padding:10px;max-height:34vh;overflow-y:auto;
+  }
+  .pick-chip{
+    display:flex;align-items:center;gap:7px;
+    border:1.5px solid var(--line-color,var(--accent));
+    background:var(--line-color,var(--accent));
+    color:#fff;
+    border-radius:999px;
+    padding:5px 12px 5px 7px;
+    font-size:13px;cursor:pointer;
+    max-width:100%;
+  }
+  .pick-chip .num{font-family:var(--font-mono);font-weight:800;}
+  .pick-chip .dir{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:0.95;}
+  /* Deselected: drained of color, so selection is obvious at a glance. */
+  .pick-chip.off{
+    background:transparent;
+    color:var(--text-muted);
+    border-color:var(--border);
+    opacity:0.65;
+  }
+  .pick-chip.off .num{color:var(--line-color,var(--text-muted));}
+  .picker-hint{font-size:11.5px;color:var(--text-muted);line-height:1.4;}
+
+  .card-footer{font-size:11px;color:var(--text-muted);font-family:var(--font-mono);}
+
+  .field{display:flex;flex-direction:column;gap:6px;font-size:13px;}
+  .field > span{font-weight:600;}
+  .field small{color:var(--text-muted);font-size:11.5px;line-height:1.4;}
+  input[type=text],input[type=password],input[type=time],textarea{
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:10px 12px;font-size:14px;width:100%;
+    color-scheme: dark;
+  }
+  .input-row{display:flex;gap:8px;}
+  .input-row input{flex:1;min-width:0;}
+  .btn-primary{
+    background:var(--accent);color:#0C1116;border:none;border-radius:10px;
+    padding:12px;font-weight:700;font-size:14px;cursor:pointer;
+  }
+  .btn-primary:disabled{opacity:0.45;}
+
+  /* ---- Settings sheet ---- */
+  .sheet{
+    position:fixed;inset:0;background:rgba(6,9,12,0.6);
+    display:flex;align-items:flex-end;justify-content:center;
+    z-index:50;
+  }
+  .sheet-inner{
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-bottom:none;
+    width:100%;max-width:480px;
+    border-radius:16px 16px 0 0;
+    padding:18px 18px calc(22px + env(safe-area-inset-bottom));
+    max-height:88vh;overflow-y:auto;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;}
+  .sheet-head h2{font-size:17px;margin:0;}
+  .mono{font-family:var(--font-mono);}
+  .debug-raw{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:8px;
+    padding:10px;font-size:11px;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all;
+  }
+
+  /* ---- Tabs ---- */
+  .tabbar{
+    display:flex;gap:6px;margin:0 16px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:11px;padding:4px;
+  }
+  .tab-btn{
+    flex:1;background:none;border:none;color:var(--text-muted);
+    font-size:14px;font-weight:700;padding:9px 8px;border-radius:8px;cursor:pointer;
+  }
+  .tab-btn.active{background:var(--accent-dim);color:#fff;}
+
+  /* ---- Journey planner ---- */
+  #panelPlan{display:flex;flex-direction:column;gap:12px;padding:0 16px;}
+  .plan-form{display:flex;flex-direction:column;gap:10px;}
+  .quick-chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .quick-chip{
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);
+    border-radius:999px;padding:5px 11px;font-size:12px;cursor:pointer;
+  }
+  .quick-chip:active{border-color:var(--accent);color:var(--text);}
+  .plan-attrib{font-size:11px;color:var(--text-muted);line-height:1.5;margin:4px 0 0;}
+  .itin{
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:12px;margin-bottom:10px;display:flex;flex-direction:column;gap:9px;
+  }
+  .itin-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .itin-time{font-family:var(--font-mono);font-size:17px;font-weight:800;}
+  .itin-meta{font-size:12px;color:var(--text-muted);}
+  .itin-legs{display:flex;flex-direction:column;gap:6px;}
+  .leg{display:flex;align-items:center;gap:9px;font-size:13px;}
+  .leg-time{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);min-width:38px;}
+  .leg-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .leg-walk{color:var(--text-muted);font-style:normal;}
+
+  .fav-list{display:flex;flex-wrap:wrap;gap:7px;}
+  .fav-chip{
+    display:flex;align-items:center;gap:7px;
+    background:var(--surface);border:1px solid var(--accent-dim);color:var(--text);
+    border-radius:999px;padding:7px 9px 7px 13px;font-size:13px;cursor:pointer;max-width:100%;
+  }
+  .fav-chip .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .fav-del{background:none;border:none;color:var(--text-muted);font-size:14px;cursor:pointer;padding:0 2px;line-height:1;}
+  .when-row{display:flex;gap:8px;align-items:center;}
+  .when-row input[type=time]{
+    flex:1;background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:9px 10px;font-size:14px;font-family:var(--font-mono);
+    color-scheme: dark;
+    -webkit-appearance:none;appearance:none;
+    min-height:40px;
+  }
+  /* The little clock icon ships as a dark glyph; invert it so it reads on
+     the dark field. */
+  .when-row input[type=time]::-webkit-calendar-picker-indicator{
+    filter: invert(1) opacity(0.65);
+    cursor:pointer;
+  }
+  .when-row input[type=time]::-webkit-datetime-edit-fields-wrapper{color:var(--text);}
+  .when-row input[type=time]::-webkit-datetime-edit-text{color:var(--text-muted);padding:0 2px;}
+  .backup-box{
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:10px;font-size:11px;font-family:var(--font-mono);
+    min-height:90px;width:100%;resize:vertical;
+  }
+  .wheel{font-size:11px;color:var(--text-muted);flex:0 0 auto;}
+
+  .plan-summary{
+    display:flex;align-items:center;gap:10px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:10px;padding:10px 12px;
+  }
+  .plan-summary .txt{
+    flex:1;min-width:0;font-size:14px;font-weight:700;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .plan-summary button{padding:7px 12px;font-size:12.5px;}
+
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+    padding:10px 16px;border-radius:999px;font-size:13px;z-index:80;
+    max-width:88%;text-align:center;
+  }
+
+  @media (prefers-reduced-motion:reduce){ *{transition:none !important;} }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">≋</span>
+      <h1>Stihnu to?</h1>
+    </div>
+    <button id="btnSettings" class="icon-btn" aria-label="Nastavení">⚙</button>
+  </header>
+
+  <div id="offlineBanner" class="empty-state" hidden style="border-color:var(--tight);color:var(--tight)">
+    Jsi offline — zobrazují se poslední načtené údaje.
+  </div>
+
+  <div id="storageWarning" class="empty-state" hidden style="text-align:left;border-color:var(--miss);color:var(--miss)">
+    ⚠️ Úložiště prohlížeče na téhle stránce nejde použít, takže se uložené karty a API klíč po zavření ztratí. Nejčastější příčiny: anonymní/inkognito okno nebo appka vnořená v jiné stránce. Zkus ji otevřít přímo na její vlastní adrese.
+  </div>
+
+  <nav class="tabbar" role="tablist">
+    <button id="tabBtnDep" class="tab-btn active" role="tab" aria-selected="true">Odjezdy</button>
+    <button id="tabBtnPlan" class="tab-btn" role="tab" aria-selected="false">Spojení</button>
+  </nav>
+
+  <section id="panelPlan" hidden>
+    <div id="favList" class="fav-list"></div>
+
+    <div id="planSummary" class="plan-summary" hidden>
+      <span id="planSummaryText" class="txt"></span>
+      <button id="btnPlanEdit" class="btn-secondary" type="button">Upravit</button>
+    </div>
+
+    <div id="planForm" class="plan-form">
+      <label class="field"><span>Odkud</span>
+        <input id="planFrom" type="text" placeholder="např. Limuzská" enterkeyhint="next" autocomplete="off" />
+      </label>
+      <div id="planFromChips" class="quick-chips"></div>
+
+      <label class="field"><span>Kam</span>
+        <input id="planTo" type="text" placeholder="např. Můstek" enterkeyhint="search" autocomplete="off" />
+      </label>
+      <div id="planToChips" class="quick-chips"></div>
+
+      <div class="when-row">
+        <button id="btnWhenMode" class="btn-secondary" type="button">Odjezd v</button>
+        <input id="planTime" type="time" enterkeyhint="done" />
+        <button id="btnWhenNow" class="btn-secondary" type="button">Teď</button>
+      </div>
+
+      <div class="input-row">
+        <button id="btnPlanSwap" class="btn-secondary" type="button" title="Prohodit">⇅</button>
+        <button id="btnPlanSearch" class="btn-primary" type="button" style="flex:1">Vyhledat spojení</button>
+      </div>
+      <button id="btnFavSave" class="btn-secondary" type="button">☆ Uložit jako oblíbené</button>
+    </div>
+    <div id="planResults"></div>
+    <p class="plan-attrib">
+      <strong id="attribApp">Stihnu to?</strong> <span id="attribContact"></span><br>
+      Data spojení: <a href="https://transitous.org/sources/" target="_blank" rel="noopener">Transitous — zdroje dat</a>,
+      routing MOTIS, podklad © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">přispěvatelé OpenStreetMap</a>.<br>
+      Transitous je dobrovolnicky provozovaná služba pro nekomerční použití; výsledky ber jako orientační
+      a u důležité cesty si je ověř u dopravce.
+    </p>
+  </section>
+
+  <div id="panelDep">
+  <div id="deck" class="deck" aria-live="polite">
+    <div class="card" id="addCard">
+      <div class="card-title">+ Nová karta</div>
+      <label class="field"><span>Název</span><input id="addNameInput" type="text" placeholder="Práce, Školka…" enterkeyhint="next" autocomplete="off" /></label>
+      <label class="field"><span>Zastávka, odkud jezdíš</span>
+        <div class="input-row"><input id="addStopInput" type="text" placeholder="např. Karlovo náměstí" enterkeyhint="search" autocomplete="off" />
+        <button id="btnAddStopSearch" class="icon-btn" type="button" aria-label="Najít">🔍</button></div>
+      </label>
+      <div id="addStatus"></div>
+    </div>
+  </div>
+  <div id="dotRow" class="dot-row"></div>
+  </div>
+
+</div>
+
+<!-- Settings sheet -->
+<div id="settingsPanel" class="sheet" hidden>
+  <div class="sheet-inner">
+    <div class="sheet-head"><h2>Nastavení</h2><button id="btnCloseSettings" class="icon-btn" aria-label="Zavřít">✕</button></div>
+
+    <label class="field">
+      <span>Golemio API klíč</span>
+      <div class="input-row">
+        <input id="inputApiKey" type="password" placeholder="Vlož token z api.golemio.cz" autocomplete="off" enterkeyhint="done" />
+        <button id="btnToggleKey" class="icon-btn" type="button" aria-label="Zobrazit klíč">👁</button>
+      </div>
+      <small>Klíč se ukládá jen v tomto zařízení. Nový získáš zdarma na <span class="mono">api.golemio.cz/api-keys</span>.</small>
+    </label>
+
+    <button id="btnSaveSettings" class="btn-primary">Uložit nastavení</button>
+
+    <div class="field">
+      <span>Záloha</span>
+      <small>Karty, oblíbená spojení i klíč jsou uložené jen v tomhle prohlížeči. Zálohu si můžeš zkopírovat a později vložit zpět.</small>
+      <div class="input-row">
+        <button id="btnExport" class="btn-secondary" type="button" style="flex:1">Zkopírovat zálohu</button>
+        <button id="btnImport" class="btn-secondary" type="button" style="flex:1">Obnovit ze zálohy</button>
+      </div>
+      <textarea id="backupBox" class="backup-box" hidden placeholder="Sem vlož zálohu a dej Obnovit ze zálohy"></textarea>
+    </div>
+
+    <button id="btnToggleDebug" class="link-btn" style="font-size:12px;color:var(--text-muted);text-decoration:underline;">Zobrazit syrová data z API (pro ladění)</button>
+    <pre id="debugRaw" class="debug-raw" hidden>—</pre>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- State ----------
+  const APP_NAME = "Stihnu to?";
+  const APP_VERSION = "1.0";
+  const APP_CONTACT = "fishkiller@email.cz";
+  let settings = { golemioKey: "" };
+  let cards = []; // [{id, name, stopName, line, headsign}]
+  const runtime = {}; // id -> {departures, loading, error, lastUpdate}
+  const addForm = { options: null, resolvedStopName: null, error: null, loading: false };
+  let lastDebug = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Storage (plain localStorage — this runs as a normal page/PWA) ----------
+  const LS_PREFIX = "stihnu-to:";
+  function storageAvailable(){
+    try{
+      const k = LS_PREFIX + "__test__";
+      localStorage.setItem(k, "1");
+      const ok = localStorage.getItem(k) === "1";
+      localStorage.removeItem(k);
+      return ok;
+    }catch(e){ return false; }
+  }
+  async function loadJSON(key, fallback){
+    try{
+      const raw = localStorage.getItem(LS_PREFIX + key);
+      return raw ? JSON.parse(raw) : fallback;
+    }catch(e){ return fallback; }
+  }
+  // Android app: cards + settings are mirrored to native storage so the
+  // home-screen widget can read them. No-op in a normal browser.
+  function nativeMirror(key, value){
+    try{
+      if (window.StihnuNative && (key === "cards" || key === "settings")){
+        window.StihnuNative.saveData(key, JSON.stringify(value));
+      }
+    }catch(e){}
+  }
+  function nativeDepartures(stopName, departures){
+    try{
+      if (!window.StihnuNative) return;
+      const slim = departures.map(d => ({
+        line: d.line, headsign: d.headsign,
+        timeMs: d.time ? d.time.getTime() : 0,
+        delaySec: d.delaySec, tracked: d.tracked, canceled: d.canceled
+      }));
+      window.StihnuNative.saveDepartures(stopName, JSON.stringify(slim));
+    }catch(e){}
+  }
+  async function saveJSON(key, value){
+    nativeMirror(key, value);
+    try{
+      localStorage.setItem(LS_PREFIX + key, JSON.stringify(value));
+      return true;
+    }catch(e){
+      showToast("Uložení se nepovedlo (úložiště prohlížeče je blokované nebo plné).");
+      return false;
+    }
+  }
+
+  function showToast(msg, ms){
+    const t = $("toast");
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(showToast._h);
+    showToast._h = setTimeout(()=>{ t.hidden = true; }, ms || 3200);
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  // ---------- Golemio (the one confirmed-reliable path — everything goes through this) ----------
+  function golemioHeaders(){ return { "x-access-token": settings.golemioKey }; }
+
+  // Every Golemio request goes through here. Requests are serialised with a
+  // minimum gap, and a 429 makes the whole queue back off — previously a burst
+  // of stop-name lookups got the key rate-limited and broke the departures too.
+  const gq = { chain: Promise.resolve(), last: 0, backoffUntil: 0 };
+  const MIN_GAP_MS = 120;
+
+  function golemioFetch(url){
+    const run = async () => {
+      const now = Date.now();
+      const waitFor = Math.max(gq.backoffUntil - now, gq.last + MIN_GAP_MS - now, 0);
+      if (waitFor > 0) await new Promise(r => setTimeout(r, waitFor));
+      gq.last = Date.now();
+      const res = await fetch(url, { headers: golemioHeaders() });
+      if (res.status === 429){
+        // Back off for everything, not just this request.
+        gq.backoffUntil = Date.now() + 20000;
+      }
+      return res;
+    };
+    const result = gq.chain.then(run, run);
+    gq.chain = result.then(() => {}, () => {});
+    return result;
+  }
+
+  function isBackingOff(){ return Date.now() < gq.backoffUntil; }
+
+  async function fetchDepartures(stopName){
+    if (!settings.golemioKey) throw new Error("NOKEY");
+    const params = new URLSearchParams();
+    params.append("names", stopName);
+    params.append("preferredTimezone", "Europe/Prague");
+    params.append("includeMetroTrains", "true");
+    params.append("limit", "60");
+    const url = "https://api.golemio.cz/v2/pid/departureboards/?" + params.toString();
+    lastDebug = { endpoint: "departureboards", url, status: "(odesíláno…)", data: null };
+    let res;
+    try{
+      res = await golemioFetch(url);
+    }catch(networkErr){
+      lastDebug.status = "network error: " + networkErr.message;
+      throw new Error("Síťový požadavek selhal (" + networkErr.message + ")");
+    }
+    const text = await res.text();
+    let data;
+    try{ data = JSON.parse(text); }catch(e){ data = text; }
+    lastDebug = { endpoint: "departureboards", url, status: res.status, data };
+    if (!res.ok){
+      throw new Error("HTTP " + res.status + ": " + (typeof data === "string" ? data.slice(0,200) : JSON.stringify(data).slice(0,200)));
+    }
+    if (data && typeof data === "object" && data.error_status){
+      throw new Error("Zastávka nenalezena (" + data.error_status + "): " + (data.error_message || ""));
+    }
+    return { departures: parseDeparturesResponse(data), stopInfo: parseStopInfo(data) };
+  }
+
+  // Confirmed against a real response: /v2/gtfs/trips/{id}?includeStopTimes=true
+  // returns HTTP 200 with a stop_times array. Those entries carry stop_id but
+  // no stop_name, so we ask for includeStops too and fall back to resolving
+  // the names separately.
+  function tripUrlCandidates(tripId){
+    const id = encodeURIComponent(tripId);
+    return [
+      "https://api.golemio.cz/v2/gtfs/trips/" + id + "?includeStopTimes=true&includeStops=true",
+      "https://api.golemio.cz/v2/gtfs/trips/" + id + "?includeStopTimes=true"
+    ];
+  }
+
+  async function fetchTripRoute(tripId){
+    if (!settings.golemioKey) throw new Error("NOKEY");
+    const attempts = [];
+    for (const url of tripUrlCandidates(tripId)){
+      let res;
+      try{
+        res = await golemioFetch(url);
+      }catch(netErr){
+        attempts.push({ url, result: "network error: " + netErr.message });
+        continue;
+      }
+      const text = await res.text();
+      let data;
+      try{ data = JSON.parse(text); }catch(e){ data = text; }
+      if (!res.ok){
+        attempts.push({ url, result: "HTTP " + res.status });
+        continue;
+      }
+      const stops = parseTripStops(data);
+      if (stops && stops.length){
+        lastDebug = { endpoint: "trip route", url, status: res.status, attempts, data };
+        await resolveStopNames(stops);
+        return { stops };
+      }
+      attempts.push({ url, result: "HTTP 200, ale seznam zastávek v odpovědi nenalezen", sample: data });
+    }
+    lastDebug = { endpoint: "trip route", status: "všechny varianty selhaly", attempts };
+    throw new Error("Trasu se nepodařilo načíst — detaily v ⚙ → syrová data.");
+  }
+
+  // Parses the confirmed response shape. Crucially, an entry with only a
+  // stop_id is still a valid stop — the earlier version dropped those, which
+  // is exactly why the route came back empty.
+  function parseTripStops(data){
+    if (!data || typeof data !== "object") return null;
+    let raw = null;
+    if (Array.isArray(data.stop_times)) raw = data.stop_times;
+    else if (Array.isArray(data.stopTimes)) raw = data.stopTimes;
+    else if (data.trip && Array.isArray(data.trip.stop_times)) raw = data.trip.stop_times;
+    if (!raw || !raw.length) return null;
+
+    const out = raw.map(st => {
+      const stop = st.stop || {};
+      const id = st.stop_id || stop.stop_id || stop.id || null;
+      const name = stop.stop_name || stop.name || st.stop_name || null;
+      const time = st.departure_time || st.arrival_time || null;
+      const seq = (typeof st.stop_sequence === "number") ? st.stop_sequence : null;
+      if (!id && !name) return null;
+      return {
+        id,
+        name: name || null,
+        time: time ? String(time).slice(0,5) : null,
+        seq,
+        // pickup/drop_off "3" means the vehicle doesn't serve passengers here.
+        // pickup/drop_off type 3 means "on request" (na znamení), not that the
+        // vehicle skips the stop — it is not shown, since it carries no useful
+        // signal for someone already standing at the stop.
+        onRequest: String(st.pickup_type) === "3"
+      };
+    }).filter(Boolean);
+
+    if (!out.length) return null;
+    if (out.every(s => s.seq !== null)) out.sort((a,b) => a.seq - b.seq);
+    return out;
+  }
+
+  // Stop names don't change, so they're cached on the device permanently:
+  // after the first lookup a route costs zero extra requests.
+  let stopNameCache = {};
+  let stopCacheDirty = false;
+
+  let stopCacheStamped = false;
+  // While a programmatic smooth scroll is running, renderDeck must not
+  // restore the previous scroll position or it cancels the animation.
+  let scrollAnimUntil = 0;
+
+  function persistStopNames(){
+    if (!stopCacheDirty) return;
+    stopCacheDirty = false;
+    saveJSON("stopNames", stopNameCache);
+    // Stamp only once, at cache creation. Re-stamping on every save would
+    // keep pushing the expiry date forward so the cache never refreshed.
+    if (!stopCacheStamped){
+      stopCacheStamped = true;
+      saveJSON("stopNamesMeta", { savedAt: Date.now() });
+    }
+  }
+
+  async function fetchStopNameSingle(id){
+    const res = await golemioFetch("https://api.golemio.cz/v2/gtfs/stops/" + encodeURIComponent(id));
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const props = (data && data.properties) ? data.properties : data;
+    const name = props && (props.stop_name || props.name);
+    if (!name) throw new Error("no name");
+    const coords = data && data.geometry && data.geometry.coordinates;
+    const lat = Array.isArray(coords) ? coords[1] : (typeof props.stop_lat === "number" ? props.stop_lat : null);
+    const lon = Array.isArray(coords) ? coords[0] : (typeof props.stop_lon === "number" ? props.stop_lon : null);
+    return { name: String(name), lat: (typeof lat === "number" ? lat : null), lon: (typeof lon === "number" ? lon : null) };
+  }
+
+  // Cache entries used to be plain strings (name only); accept both shapes.
+  function cachedStop(id){
+    const v = stopNameCache[id];
+    if (!v) return null;
+    return (typeof v === "string") ? { name: v, lat: null, lon: null } : v;
+  }
+
+  // A name alone isn't enough any more — the route map needs coordinates, so
+  // older name-only entries count as incomplete and get fetched again once.
+  function isStopCacheComplete(id){
+    const c = cachedStop(id);
+    return !!(c && c.name && typeof c.lat === "number" && typeof c.lon === "number");
+  }
+
+  // One request for the whole route instead of one per stop. If the bulk
+  // endpoint doesn't take this shape, we fall back to a few singles.
+  async function fetchStopNamesBulk(ids){
+    const params = new URLSearchParams();
+    ids.forEach(id => params.append("ids[]", id));
+    params.append("limit", String(ids.length));
+    const res = await golemioFetch("https://api.golemio.cz/v2/gtfs/stops/?" + params.toString());
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    let list = [];
+    if (data && Array.isArray(data.features)) list = data.features.map(f => f.properties || f);
+    else if (Array.isArray(data)) list = data;
+    else if (data && Array.isArray(data.stops)) list = data.stops;
+    let found = 0;
+    list.forEach(p => {
+      const id = p.stop_id || p.id;
+      const name = p.stop_name || p.name;
+      const lat = (typeof p.stop_lat === "number") ? p.stop_lat : null;
+      const lon = (typeof p.stop_lon === "number") ? p.stop_lon : null;
+      if (id && name){
+        stopNameCache[id] = { name: String(name), lat, lon };
+        stopCacheDirty = true; found++;
+      }
+    });
+    if (!found) throw new Error("no names in bulk response");
+  }
+
+  async function resolveStopNames(stops){
+    const needed = Array.from(new Set(
+      stops.filter(s => s.id && !isStopCacheComplete(s.id)).map(s => s.id)
+    ));
+
+    if (needed.length){
+      try{
+        await fetchStopNamesBulk(needed);
+      }catch(e){ /* fall through to singles */ }
+
+      // Always mop up whatever the bulk call didn't return. A partial bulk
+      // response used to be treated as complete, which left exactly one or two
+      // stops showing their raw id instead of a name.
+      const still = needed.filter(id => !isStopCacheComplete(id)).slice(0, 25);
+      for (const id of still){
+        if (isBackingOff()) break;
+        try{
+          stopNameCache[id] = await fetchStopNameSingle(id);
+          stopCacheDirty = true;
+        }catch(e){ /* leave it; the id is shown instead */ }
+      }
+      persistStopNames();
+    }
+
+    stops.forEach(s => {
+      const c = s.id ? cachedStop(s.id) : null;
+      if (c){
+        if (!s.name) s.name = c.name;
+        if (s.lat == null && typeof c.lat === "number"){ s.lat = c.lat; s.lon = c.lon; }
+      }
+    });
+    return stops;
+  }
+
+  function parseStopInfo(data){
+    if (data && Array.isArray(data.stops) && data.stops.length){
+      const s = data.stops[0];
+      const lat = (typeof s.stop_lat === "number") ? s.stop_lat : null;
+      const lon = (typeof s.stop_lon === "number") ? s.stop_lon : null;
+      return { name: s.stop_name || s.name || null, lat, lon };
+    }
+    return null;
+  }
+
+  function parseDeparturesResponse(data){
+    let deps = [];
+    if (data && Array.isArray(data.departures)) deps = data.departures;
+    else if (Array.isArray(data)) deps = data;
+    else if (data && Array.isArray(data.data)) deps = data.data;
+
+    const out = deps.map(d => {
+      const route = d.route || {};
+      const trip = d.trip || {};
+      const lastStop = d.last_stop || {};
+      const delay = d.delay || {};
+      const depTs = d.departure_timestamp || d.arrival_timestamp || {};
+      const scheduledStr = depTs.scheduled || d.scheduled;
+      const predictedStr = depTs.predicted || d.predicted;
+      const timeStr = predictedStr || scheduledStr;
+      const line = route.short_name || d.route_short_name || d.line || "?";
+      // Note: last_stop is the stop the vehicle most recently passed, NOT the
+      // terminus — it must never be used as the direction.
+      const headsign = trip.headsign || d.headsign || d.direction || "";
+      const t = timeStr ? new Date(timeStr) : null;
+      // delay.minutes/seconds are only meaningful when is_available is true.
+      const tracked = delay.is_available === true;
+      let delaySec = null;
+      if (tracked){
+        if (typeof delay.seconds === "number") delaySec = delay.seconds;
+        else if (typeof delay.minutes === "number") delaySec = delay.minutes * 60;
+      }
+      return {
+        line: String(line),
+        headsign: String(headsign),
+        time: t,
+        scheduled: scheduledStr ? new Date(scheduledStr) : null,
+        predicted: predictedStr ? new Date(predictedStr) : null,
+        tracked,
+        delaySec,
+        canceled: trip.is_canceled === true || d.is_canceled === true,
+        tripId: trip.id || trip.gtfs_trip_id || d.trip_id || null,
+        // Evidenční číslo vozu — mapa.pid.cz accepts it as a filter, which
+        // pins the map to this one vehicle instead of the whole line.
+        // Only shown when the data actually says so — absence is not a claim
+        // that the vehicle is inaccessible.
+        wheelchair: trip.is_wheelchair_accessible === true || d.is_wheelchair_accessible === true ||
+                    (d.vehicle_type && d.vehicle_type.is_wheelchair_accessible === true),
+        lastStopName: lastStop.name || null
+      };
+    }).filter(d => d.time instanceof Date && !isNaN(d.time));
+
+    out.sort((a,b) => a.time - b.time);
+    return out;
+  }
+
+  // ---------- Card logic ----------
+  // Colors roughly follow PID conventions so lines are recognisable at a glance.
+  function lineColor(line){
+    const l = String(line).trim().toUpperCase();
+    if (l === "A") return "#3CB54A";   // metro A
+    if (l === "B") return "#F0AB00";   // metro B
+    if (l === "C") return "#E31E24";   // metro C
+    if (/^[SR]/.test(l)) return "#2E7D5B"; // vlaky
+    const n = parseInt(l, 10);
+    if (!isNaN(n)){
+      if (n >= 90 && n <= 99) return "#7C6BA8";   // noční tramvaje
+      if (n >= 1 && n <= 89) return "#C8102E";    // denní tramvaje
+      if (n >= 900) return "#3D4A66";             // noční autobusy
+      if (n >= 100) return "#0079C2";             // denní autobusy
+    }
+    return "#4FB8A9";
+  }
+
+  // Delay is only meaningful when the vehicle is actually being tracked —
+  // otherwise the time is just the timetable.
+  function delayInfo(d){
+    if (d.canceled) return { text: "zrušeno", color: "var(--miss)", title: "Spoj je zrušen" };
+    if (!d.tracked || d.delaySec === null){
+      return { text: "JŘ", color: "var(--text-muted)", title: "Bez živých dat — čas podle jízdního řádu" };
+    }
+    const min = Math.round(d.delaySec / 60);
+    if (min <= 0) return { text: "včas", color: "var(--ok)", title: "Jede včas" };
+    if (min <= 2) return { text: "+" + min, color: "var(--ok)", title: "Zpoždění " + min + " min" };
+    if (min <= 5) return { text: "+" + min, color: "var(--tight)", title: "Zpoždění " + min + " min" };
+    return { text: "+" + min, color: "var(--miss)", title: "Zpoždění " + min + " min" };
+  }
+
+  function fmtTime(d){
+    return d ? d.toLocaleTimeString("cs-CZ", {hour:"2-digit", minute:"2-digit"}) : "—";
+  }
+
+  function urgencyStatus(minutesUntil){
+    if (minutesUntil <= 4) return "miss";
+    if (minutesUntil <= 9) return "tight";
+    return "ok";
+  }
+  function statusColor(status){
+    if (status === "ok") return "var(--ok)";
+    if (status === "tight") return "var(--tight)";
+    return "var(--miss)";
+  }
+
+  async function refreshCard(id){
+    const card = cards.find(c => c.id === id);
+    if (!card) return;
+    if (!settings.golemioKey){
+      runtime[id] = Object.assign({}, runtime[id], { departures: [], loading: false, error: "NOKEY", lastUpdate: null });
+      renderDeck();
+      return;
+    }
+    runtime[id] = runtime[id] || {};
+    runtime[id].loading = true;
+    renderDeck();
+    try{
+      const result = await fetchDepartures(card.stopName);
+      nativeDepartures(card.stopName, result.departures);
+      // Grow the known-lines list as new line+headsign combos are observed,
+      // so the "manage lines" checklist gets more complete over time.
+      card.knownLines = card.knownLines || [];
+      card.excludedKeys = card.excludedKeys || [];
+      const known = new Set(card.knownLines.map(k => k.line + "|" + k.headsign));
+      let grew = false;
+      result.departures.forEach(d => {
+        const key = d.line + "|" + d.headsign;
+        if (!known.has(key)){
+          card.knownLines.push({ line: d.line, headsign: d.headsign });
+          known.add(key);
+          grew = true;
+        }
+      });
+      if (grew) saveJSON("cards", cards);
+      const visible = result.departures.filter(d => !card.excludedKeys.includes(d.line + "|" + d.headsign));
+      // Object.assign preserves UI state (open detail panel, open line manager)
+      // across the periodic data refresh.
+      runtime[id] = Object.assign({}, runtime[id], { departures: visible.slice(0,14), loading: false, error: null, lastUpdate: new Date() });
+    }catch(e){
+      const raw = (e && e.message) || String(e);
+      const friendly = raw.indexOf("429") !== -1
+        ? "Příliš mnoho dotazů na API — zkouším to znovu za chvíli."
+        : raw;
+      // Keep whatever departures we last had: a blank card is worse than
+      // slightly stale times.
+      runtime[id] = Object.assign({}, runtime[id], { loading: false, error: friendly });
+    }
+    renderDeck();
+  }
+
+  function refreshAllCards(){
+    cards.forEach(c => refreshCard(c.id));
+    retryOpenDetailVehicle();
+  }
+
+  // A departure several minutes out often has no vehicle assigned yet, so the
+  // number appears only later. Keep asking while its detail stays open.
+  function retryOpenDetailVehicle(){
+    cards.forEach(c => {
+      const rt = runtime[c.id];
+      if (!rt || !rt.detailKey || rt.vehicleNumber || !rt.departures) return;
+      const dep = rt.departures.find(x => depKey(x) === rt.detailKey);
+      if (!dep || !dep.tripId) return;
+      fetchVehicleNumber(dep.tripId).then(num => {
+        if (num && runtime[c.id] && runtime[c.id].detailKey === rt.detailKey){
+          runtime[c.id].vehicleNumber = num;
+          renderDeck();
+        }
+      });
+    });
+  }
+
+  function moveCard(id, dir){
+    const idx = cards.findIndex(c => c.id === id);
+    const swapWith = idx + dir;
+    if (idx < 0 || swapWith < 0 || swapWith >= cards.length) return;
+    const tmp = cards[idx];
+    cards[idx] = cards[swapWith];
+    cards[swapWith] = tmp;
+    saveJSON("cards", cards);
+    renderDeck();
+  }
+
+  function deleteCard(id){
+    cards = cards.filter(c => c.id !== id);
+    delete runtime[id];
+    saveJSON("cards", cards);
+    renderDeck();
+  }
+
+  // Stable identity for one departure, used so an open detail panel keeps
+  // pointing at the same trip even after the list refreshes.
+  function depKey(d){
+    if (!d) return null;
+    // Must not depend on the predicted time: that moves as the delay updates,
+    // which would change the key mid-view and close the open detail panel.
+    if (d.tripId) return "t:" + d.tripId;
+    return "s:" + d.line + "|" + d.headsign + "|" + (d.scheduled ? d.scheduled.getTime() : "?");
+  }
+
+  function openDetail(id, index){
+    runtime[id] = runtime[id] || {};
+    // Tapping the same row again closes it.
+    const rt0 = runtime[id];
+    const dep0 = rt0.departures && rt0.departures[index];
+    // Identify the opened departure by a stable key — the list shifts as
+    // vehicles depart, so a bare index would later point at a different trip.
+    const key = dep0 ? depKey(dep0) : null;
+    const closing = rt0.detailKey === key;
+    runtime[id].detailKey = closing ? null : key;
+    runtime[id].route = null;
+    runtime[id].routeError = null;
+    runtime[id].routeLoading = false;
+    renderDeck();
+    if (!closing){
+      loadRoute(id, index);
+      scrollDepartureIntoView(id, index);
+    }
+  }
+
+  // Brings the tapped departure to the top of the screen so the detail that
+  // opens beneath it is visible without scrolling by hand.
+  //
+  // This must run AGAIN once the route has loaded: at the moment of the tap
+  // the panel is still short, so the page isn't tall enough to scroll that far
+  // and the browser clamps the scroll — which is why the row ended up
+  // mid-screen instead of at the top.
+  function scrollDepartureIntoView(cardId, index, smooth){
+    requestAnimationFrame(() => {
+      const cardEl = document.querySelector('[data-id="' + cardId + '"]');
+      if (!cardEl) return;
+      const row = cardEl.querySelector('[data-dep="' + index + '"]');
+      if (!row) return;
+      const TOP_MARGIN = 8; // put the departure right at the top
+      const delta = row.getBoundingClientRect().top - TOP_MARGIN;
+      if (Math.abs(delta) > 4){
+        // Pause scroll restoration so a re-render can't snap us back mid-move.
+        scrollAnimUntil = Date.now() + (smooth === false ? 300 : 900);
+        window.scrollBy({ top: delta, behavior: smooth === false ? "auto" : "smooth" });
+      }
+    });
+  }
+
+  async function loadRoute(id, index){
+    const rt = runtime[id];
+    if (!rt || !rt.departures) return;
+    const dep = rt.departures[index];
+    if (!dep) return;
+    if (!dep.tripId){
+      rt.routeError = "U tohoto spoje nepřišlo ID, podle kterého by šla trasa dohledat.";
+      renderDeck();
+      return;
+    }
+    rt.routeLoading = true;
+    rt.vehicleNumber = cachedVehicleNumber(dep.tripId);
+    renderDeck();
+    // Runs in parallel with the route; a missing number just means the map
+    // link falls back to filtering by line and direction.
+    if (dep.tripId){
+      fetchVehicleNumber(dep.tripId).then(num => {
+        if (num && runtime[id] && runtime[id].detailKey === depKey(dep)){
+          runtime[id].vehicleNumber = num;
+          renderDeck();
+        }
+      });
+    }
+    try{
+      const stops = await fetchTripRoute(dep.tripId);
+      // Only apply if the user hasn't switched to another departure meanwhile.
+      if (runtime[id] && runtime[id].detailKey === depKey(dep)){
+        runtime[id].route = stops;
+        runtime[id].routeError = null;
+      }
+    }catch(e){
+      if (runtime[id] && runtime[id].detailKey === depKey(dep)){
+        runtime[id].routeError = (e && e.message) || String(e);
+      }
+    }
+    if (runtime[id]) runtime[id].routeLoading = false;
+    renderDeck();
+    // The panel is now at full height, so the scroll that was clamped earlier
+    // can finally land the departure at the top.
+    if (runtime[id] && runtime[id].detailKey === depKey(dep)){
+      scrollDepartureIntoView(id, index);
+    }
+  }
+
+  function closeDetail(id){
+    runtime[id] = runtime[id] || {};
+    runtime[id].detailKey = null;
+    renderDeck();
+  }
+
+  function toggleLineManager(id){
+    runtime[id] = runtime[id] || {};
+    runtime[id].manageOpen = !runtime[id].manageOpen;
+    renderDeck();
+  }
+
+  function toggleExcluded(id, key, checked){
+    const card = cards.find(c => c.id === id);
+    if (!card) return;
+    card.excludedKeys = card.excludedKeys || [];
+    card.excludedKeys = checked
+      ? card.excludedKeys.filter(k => k !== key)
+      : (card.excludedKeys.includes(key) ? card.excludedKeys : card.excludedKeys.concat(key));
+    saveJSON("cards", cards);
+    refreshCard(id);
+  }
+
+  // ---------- Add-card (inline search — creates the card right away) ----------
+  async function searchAddStop(){
+    const name = $("addStopInput").value.trim();
+    if (!name){ showToast("Napiš název zastávky."); return; }
+    if (!settings.golemioKey){ showToast("Nejdřív vlož Golemio API klíč v nastavení (⚙)."); return; }
+    addForm.loading = true; addForm.error = null; addForm.options = null;
+    renderAddFormStatus();
+    try{
+      const result = await fetchDepartures(name);
+      const info = result.stopInfo;
+      const resolvedName = (info && info.name) || name;
+      if (!result.departures.length){
+        addForm.error = "Ze zastávky \"" + resolvedName + "\" teď nic nejede — zkus to za chvíli, nebo zkontroluj název.";
+      } else {
+        const seen = new Map();
+        result.departures.forEach(d => {
+          const key = d.line + "|" + d.headsign;
+          if (!seen.has(key)) seen.set(key, { line: d.line, headsign: d.headsign, selected: true });
+        });
+        addForm.resolvedStopName = resolvedName;
+        addForm.options = Array.from(seen.values()).sort((a,b) => {
+          const byLine = String(a.line).localeCompare(String(b.line), "cs", {numeric:true});
+          return byLine !== 0 ? byLine : String(a.headsign).localeCompare(String(b.headsign), "cs");
+        });
+      }
+    }catch(e){
+      addForm.error = (e && e.message) || String(e);
+    }
+    addForm.loading = false;
+    renderAddFormStatus();
+  }
+
+  async function saveNewCard(){
+    const cardName = $("addNameInput").value.trim();
+    if (!cardName){ showToast("Napiš název karty."); $("addNameInput").focus(); return; }
+    if (!addForm.options || !addForm.options.length){ showToast("Nejdřív najdi zastávku."); return; }
+    const chosen = addForm.options.filter(o => o.selected);
+    if (!chosen.length){ showToast("Vyber aspoň jednu linku."); return; }
+    const card = {
+      id: "c_" + Date.now(),
+      name: cardName,
+      stopName: addForm.resolvedStopName,
+      knownLines: addForm.options.map(o => ({ line: o.line, headsign: o.headsign })),
+      excludedKeys: addForm.options.filter(o => !o.selected).map(o => o.line + "|" + o.headsign)
+    };
+    cards.push(card);
+    const ok = await saveJSON("cards", cards);
+    if (!ok){ cards.pop(); return; }
+    addForm.options = null;
+    addForm.error = null; addForm.resolvedStopName = null;
+    $("addNameInput").value = "";
+    $("addStopInput").value = "";
+    showToast("Karta uložena: " + cardName);
+    renderDeck();
+    renderAddFormStatus();
+    refreshCard(card.id);
+    requestAnimationFrame(() => {
+      const el = $("deck").querySelector('[data-id="' + card.id + '"]');
+      if (el) el.scrollIntoView({ behavior: "smooth", inline: "center" });
+    });
+  }
+
+  // ---------- Render ----------
+  // The departures endpoint doesn't carry the vehicle number; Golemio exposes
+  // it on /vehiclepositions/{gtfsTripId}. Field naming there isn't documented
+  // publicly, so we search the response for a registration-like key rather
+  // than betting on one spelling.
+  function findVehicleNumber(obj, depth){
+    depth = depth || 0;
+    if (!obj || typeof obj !== "object" || depth > 6) return null;
+    for (const k of Object.keys(obj)){
+      const v = obj[k];
+      if ((typeof v === "string" || typeof v === "number") &&
+          /registration_number|vehicle_number|evidencni/i.test(k)){
+        const str = String(v).trim();
+        if (str) return str;
+      }
+    }
+    for (const k of Object.keys(obj)){
+      const v = obj[k];
+      if (v && typeof v === "object"){
+        const found = findVehicleNumber(v, depth + 1);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  let vehicleNumCache = {};   // tripId -> { num, at }
+  const VEHICLE_TTL_MS = 3 * 60 * 60 * 1000; // a trip never outlives this
+
+  function cachedVehicleNumber(tripId){
+    const e = tripId ? vehicleNumCache[tripId] : null;
+    if (!e) return null;
+    if (Date.now() - e.at > VEHICLE_TTL_MS){ delete vehicleNumCache[tripId]; return null; }
+    return e.num;
+  }
+
+  async function fetchVehicleNumber(tripId){
+    const hit = cachedVehicleNumber(tripId);
+    if (hit) return hit;
+    const urls = [
+      "https://api.golemio.cz/v2/vehiclepositions/" + encodeURIComponent(tripId),
+      "https://api.golemio.cz/v2/vehiclepositions/" + encodeURIComponent(tripId) + "?includeNotTracking=true"
+    ];
+    for (const url of urls){
+      try{
+        const res = await golemioFetch(url);
+        if (!res.ok) continue;
+        const data = await res.json();
+        lastDebug = { endpoint: "vehicle position", url, status: res.status, data };
+        const num = findVehicleNumber(data);
+        if (num){
+          vehicleNumCache[tripId] = { num, at: Date.now() };
+          saveJSON("vehicleNums", vehicleNumCache);
+          return num;
+        }
+      }catch(e){ /* try the next shape */ }
+    }
+    return null;
+  }
+
+  // mapa.pid.cz documents its filter in-app: line, or "line:destination"
+  // (e.g. 9:Spojovací), with "+" standing in for spaces and prefix matches
+  // accepted. Building that gives a map already narrowed to this departure.
+  function pidMapUrl(d, vehicleNumber){
+    const line = String(d.line || "").trim();
+    // The vehicle number narrows the map to this exact vehicle; line:destination
+    // is the fallback and still shows every vehicle running that direction.
+    const veh = vehicleNumber ? String(vehicleNumber).trim() : "";
+    if (veh) return "https://mapa.pid.cz/?filter=" + encodeURIComponent(veh);
+    if (!line) return "https://mapa.pid.cz/";
+    const dest = String(d.headsign || "").trim().replace(/\s+/g, "+");
+    const filter = dest ? line + ":" + dest : line;
+    const enc = encodeURIComponent(filter)
+      .replace(/%3A/gi, ":")   // their format uses a literal colon
+      .replace(/%2B/gi, "+");  // and a literal plus for spaces
+    return "https://mapa.pid.cz/?filter=" + enc;
+  }
+
+  function buildDetailHtml(card, rt, d){
+    const di = delayInfo(d);
+    let routeHtml = "";
+    if (rt.routeLoading){
+      routeHtml = '<p class="card-sub">Načítám trasu…</p>';
+    } else if (rt.routeError){
+      routeHtml = '<p class="card-sub" style="color:var(--miss)">' + escapeHtml(rt.routeError) + '</p>';
+    } else if (rt.route && rt.route.stops && rt.route.stops.length){
+      const stops = rt.route.stops;
+      const boardTime = d.scheduled ? fmtTime(d.scheduled) : null;
+      let boardIdx = stops.findIndex(s => s.name && card.stopName &&
+        s.name.toLowerCase() === card.stopName.toLowerCase());
+      if (boardIdx < 0 && boardTime){
+        boardIdx = stops.findIndex(s => s.time === boardTime);
+      }
+      // Where the vehicle actually is, per the API's last-passed stop.
+      const vehicleIdx = (d.tracked && d.lastStopName)
+        ? stops.findIndex(s => s.name && s.name.toLowerCase() === d.lastStopName.toLowerCase())
+        : -1;
+
+      routeHtml =
+        '<div class="route-list">' +
+        stops.map((s, i) => {
+          const cls = [
+            "route-stop",
+            i === stops.length - 1 ? "last" : "",
+            boardIdx >= 0 && i < boardIdx ? "before" : "",
+            boardIdx === i ? "board" : "",
+            vehicleIdx === i ? "vehicle" : ""
+          ].filter(Boolean).join(" ");
+          return '<div class="' + cls + '">' +
+            '<span class="route-dot"></span>' +
+            '<span class="route-name">' + escapeHtml(s.name || s.id || "?") +
+              (vehicleIdx === i ? ' <span class="route-flag">← vůz je tady</span>' : '') +
+            '</span>' +
+            (s.time ? '<span class="route-time mono">' + escapeHtml(s.time) + '</span>' : '') +
+          '</div>';
+        }).join("") +
+      '</div>';
+    }
+    return '<div class="dep-detail" style="--line-color:' + lineColor(d.line) + '">' +
+        '<div class="dep-detail-head">' +
+          '<span class="line-chip">' + escapeHtml(d.line) + '</span>' +
+          '<span class="dep-detail-dir">' + escapeHtml(d.headsign || "?") + '</span>' +
+          '<button class="icon-btn small" data-act="closedetail">✕</button>' +
+        '</div>' +
+        '<div class="detail-grid">' +
+          '<span>Podle jízdního řádu</span><span class="mono">' + fmtTime(d.scheduled) + '</span>' +
+          '<span>Skutečný odjezd</span><span class="mono">' + fmtTime(d.predicted || d.scheduled) + '</span>' +
+          '<span>Stav</span><span class="mono" style="color:' + di.color + '">' + escapeHtml(di.title) + '</span>' +
+          '<span>Konečná</span><span class="mono">' + escapeHtml(
+            (rt.route && rt.route.stops && rt.route.stops.length
+              ? rt.route.stops[rt.route.stops.length-1].name : null) || d.headsign || "—"
+          ) + '</span>' +
+          (rt.vehicleNumber
+            ? '<span>Číslo vozu</span><span class="mono">' + escapeHtml(String(rt.vehicleNumber)) + '</span>'
+            : '') +
+          (d.lastStopName && d.tracked
+            ? '<span>Vůz naposledy projel</span><span class="mono">' + escapeHtml(d.lastStopName) + '</span>'
+            : '') +
+        '</div>' +
+        routeHtml +
+        '<a class="detail-link" href="' + pidMapUrl(d, rt.vehicleNumber) + '" target="_blank" rel="noopener">' +
+          (rt.vehicleNumber
+            ? 'Sledovat vůz ' + escapeHtml(String(rt.vehicleNumber)) + ' na mapě PID ↗'
+            : 'Sledovat linku ' + escapeHtml(d.line) + ' na mapě PID ↗') +
+        '</a>' +
+      '</div>';
+  }
+
+  function renderDeck(){
+    const deck = $("deck");
+    const addEl = $("addCard");
+    const scrollLeft = deck.scrollLeft;
+    const pageScrollY = window.scrollY;
+    // Preserve how far the open route list was scrolled, so a data refresh
+    // doesn't yank the user back to the top of the trip.
+    const openRoute = deck.querySelector('.route-list');
+    const routeScrollTop = openRoute ? openRoute.scrollTop : null;
+
+    // Remove only the previously-rendered configured cards, never #addCard.
+    deck.querySelectorAll(".card:not(#addCard)").forEach(el => el.remove());
+
+    const frag = document.createDocumentFragment();
+    cards.forEach((card, idx) => {
+      const rt = runtime[card.id] || {};
+      const el = document.createElement("div");
+      el.className = "card";
+      el.dataset.id = card.id;
+
+      let body = "";
+      const hasDeps = rt.departures && rt.departures.length;
+      if (rt.error === "NOKEY"){
+        body = '<p class="card-sub">Vlož Golemio API klíč v nastavení (⚙) pro živé odjezdy.</p>';
+      } else if (rt.loading && !rt.lastUpdate){
+        body = '<p class="card-sub">Načítám odjezdy…</p>';
+      } else if (rt.error && !hasDeps){
+        body = '<p class="card-sub" style="color:var(--miss)">' + escapeHtml(rt.error) + '</p>';
+      } else if (!hasDeps){
+        body = '<p class="card-sub">Nic nejede — všechny linky možná máš vyřazené, nebo teď nic nejezdí.</p>';
+      } else {
+        const now = new Date();
+        const shown = rt.departures.slice(0, 7);
+        const detailDepEarly = rt.detailKey ? rt.departures.find(x => depKey(x) === rt.detailKey) : null;
+        const detailKeyShown = detailDepEarly ? depKey(detailDepEarly) : null;
+
+        body = shown.map((d, i) => {
+          const m = Math.max(Math.floor((d.time - now)/60000), 0);
+          const di = delayInfo(d);
+          const t = d.time ? d.time.getTime() : 0;
+          let rowHtml;
+          if (i === 0){
+            rowHtml =
+              '<div class="dep-first" data-dep="0" style="--line-color:' + lineColor(d.line) + ';--urgency:' + statusColor(urgencyStatus(m)) + '">' +
+                '<span class="line-chip xl">' + escapeHtml(d.line) + '</span>' +
+                '<span class="dep-first-min" data-t="' + t + '"><span class="num">' + m + '</span><span class="unit">min</span></span>' +
+                '<span class="dep-first-dir">' + escapeHtml(d.headsign || "") + (d.wheelchair ? ' <span class="wheel">♿</span>' : '') + '</span>' +
+                '<span class="delay-badge" style="color:' + di.color + '" title="' + escapeHtml(di.title) + '">' + escapeHtml(di.text) + '</span>' +
+              '</div>';
+          } else {
+            const soon = m <= 15;
+            rowHtml =
+              '<div class="dep-row' + (soon ? " soon" : "") + '" data-dep="' + i + '" style="--line-color:' + lineColor(d.line) + '">' +
+                '<span class="line-chip' + (soon ? "" : " sm") + '">' + escapeHtml(d.line) + '</span>' +
+                '<span class="dep-dir">' + escapeHtml(d.headsign || "?") + (d.wheelchair ? ' <span class="wheel">♿</span>' : '') + '</span>' +
+                '<span class="delay-badge" style="color:' + di.color + '" title="' + escapeHtml(di.title) + '">' + escapeHtml(di.text) + '</span>' +
+                '<span class="dep-min" data-t="' + t + '"><span class="num">' + m + '</span> min</span>' +
+              '</div>';
+          }
+          // The detail panel sits directly beneath the departure it belongs to,
+          // pushing the remaining departures down.
+          if (detailKeyShown && depKey(d) === detailKeyShown){
+            rowHtml += buildDetailHtml(card, rt, d);
+          }
+          return rowHtml;
+        }).join("");
+        body = '<div class="dep-rows">' + body + '</div>';
+      }
+
+      let manageHtml = "";
+      if (rt.manageOpen){
+        const known = (card.knownLines || []).slice().sort((a,b) => {
+          const byLine = String(a.line).localeCompare(String(b.line), "cs", {numeric:true});
+          return byLine !== 0 ? byLine : String(a.headsign).localeCompare(String(b.headsign), "cs");
+        });
+        manageHtml =
+          '<p class="picker-hint">Klepnutím vypneš/zapneš linku i směr. Vypnuté se na kartě nezobrazují.</p>' +
+          '<div class="line-picker">' +
+          (known.length ? known.map(k => {
+            const key = k.line + "|" + k.headsign;
+            const on = !(card.excludedKeys || []).includes(key);
+            return '<button type="button" class="pick-chip' + (on ? "" : " off") + '" data-key="' + escapeHtml(key) + '" style="--line-color:' + lineColor(k.line) + '">' +
+              '<span class="num">' + escapeHtml(k.line) + '</span>' +
+              '<span class="dir">' + escapeHtml(k.headsign || "?") + '</span>' +
+            '</button>';
+          }).join("") : '<p class="card-sub">Zatím appka neviděla žádnou linku z této zastávky.</p>') +
+          '</div>';
+      }
+
+      const lastUpd = rt.lastUpdate ? rt.lastUpdate.toLocaleTimeString("cs-CZ", {hour:"2-digit",minute:"2-digit"}) : "—";
+
+      el.innerHTML =
+        '<div class="card-head">' +
+          '<div><div class="card-title">' + escapeHtml(card.name) + '</div>' +
+          '<div class="card-sub">' + escapeHtml(card.stopName) + '</div></div>' +
+          '<div class="card-actions">' +
+            '<button class="icon-btn small" data-act="left" ' + (idx===0?"disabled":"") + '>◀</button>' +
+            '<button class="icon-btn small" data-act="right" ' + (idx===cards.length-1?"disabled":"") + '>▶</button>' +
+            '<button class="icon-btn small" data-act="manage">☰</button>' +
+            '<button class="icon-btn small" data-act="del">✕</button>' +
+          '</div>' +
+        '</div>' +
+        body +
+        manageHtml +
+        '<div class="card-footer">aktualizováno ' + lastUpd +
+          (rt.error && hasDeps && rt.error !== "NOKEY"
+            ? ' · <span style="color:var(--tight)">' + escapeHtml(rt.error) + '</span>'
+            : '') +
+        '</div>';
+
+      el.querySelector('[data-act="left"]').addEventListener("click", () => moveCard(card.id, -1));
+      el.querySelector('[data-act="right"]').addEventListener("click", () => moveCard(card.id, 1));
+      el.querySelector('[data-act="del"]').addEventListener("click", () => deleteCard(card.id));
+      el.querySelector('[data-act="manage"]').addEventListener("click", () => toggleLineManager(card.id));
+      el.querySelectorAll('.pick-chip').forEach(chip => {
+        chip.addEventListener("click", () => {
+          const nowOn = chip.classList.contains("off"); // toggling to ON
+          toggleExcluded(card.id, chip.dataset.key, nowOn);
+        });
+      });
+      el.querySelectorAll('[data-dep]').forEach(row => {
+        row.addEventListener("click", () => openDetail(card.id, parseInt(row.dataset.dep, 10)));
+      });
+      const closeBtn = el.querySelector('[data-act="closedetail"]');
+      if (closeBtn){
+        closeBtn.addEventListener("click", (e) => { e.stopPropagation(); closeDetail(card.id); });
+      }
+
+      frag.appendChild(el);
+    });
+    deck.insertBefore(frag, addEl);
+
+    deck.scrollLeft = scrollLeft;
+    if (routeScrollTop !== null){
+      const newRoute = deck.querySelector('.route-list');
+      if (newRoute) newRoute.scrollTop = routeScrollTop;
+    }
+    if (Date.now() > scrollAnimUntil && window.scrollY !== pageScrollY){
+      window.scrollTo(0, pageScrollY);
+    }
+    renderDots();
+  }
+
+  // Updates only #addStatus (the results/error area below the add-card's
+  // inputs) — never touches the input fields themselves, so typing in them
+  // is never interrupted by a periodic refresh.
+  function renderAddFormStatus(){
+    const statusEl = $("addStatus");
+    if (addForm.loading){
+      statusEl.innerHTML = '<p class="card-sub">Hledám odjezdy…</p>';
+    } else if (addForm.error){
+      statusEl.innerHTML = '<p class="card-sub" style="color:var(--miss)">' + escapeHtml(addForm.error) + '</p>';
+    } else if (addForm.options && addForm.options.length){
+      statusEl.innerHTML =
+        '<p class="picker-hint">Zastávka: <strong>' + escapeHtml(addForm.resolvedStopName) + '</strong><br>' +
+        'Klepnutím vypni linky a směry, které nepoužíváš. Upravit to půjde i později (☰ na kartě).</p>';
+      const picker = document.createElement("div");
+      picker.className = "line-picker";
+      addForm.options.forEach(opt => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "pick-chip" + (opt.selected ? "" : " off");
+        chip.style.setProperty("--line-color", lineColor(opt.line));
+        chip.innerHTML = '<span class="num">' + escapeHtml(opt.line) + '</span>' +
+                         '<span class="dir">' + escapeHtml(opt.headsign || "?") + '</span>';
+        chip.addEventListener("click", () => {
+          opt.selected = !opt.selected;
+          chip.classList.toggle("off", !opt.selected);
+        });
+        picker.appendChild(chip);
+      });
+      statusEl.appendChild(picker);
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "btn-primary";
+      saveBtn.textContent = "Uložit kartu";
+      saveBtn.addEventListener("click", saveNewCard);
+      statusEl.appendChild(saveBtn);
+    } else {
+      statusEl.innerHTML = "";
+    }
+  }
+
+  function renderDots(){
+    const dotRow = $("dotRow");
+    dotRow.innerHTML = "";
+    const total = cards.length + 1;
+    for (let i=0;i<total;i++){
+      const d = document.createElement("span");
+      d.className = "dot";
+      dotRow.appendChild(d);
+    }
+    updateActiveDot();
+  }
+
+  function updateActiveDot(){
+    const deck = $("deck");
+    const dots = $("dotRow").children;
+    if (!dots.length) return;
+    const cardEls = deck.querySelectorAll(".card");
+    if (!cardEls.length) return;
+    const center = deck.scrollLeft + deck.clientWidth/2;
+    let closest = 0, closestDist = Infinity;
+    cardEls.forEach((el, i) => {
+      const mid = el.offsetLeft + el.offsetWidth/2;
+      const dist = Math.abs(mid - center);
+      if (dist < closestDist){ closestDist = dist; closest = i; }
+    });
+    Array.from(dots).forEach((d, i) => d.classList.toggle("active", i === closest));
+  }
+
+  // Updates only the minute numbers, touching no other DOM. A full renderDeck()
+  // here would rebuild every card every 5 seconds, which reset scroll position
+  // and made the card feel like it kept jumping.
+  function tickCountdowns(){
+    const now = Date.now();
+    document.querySelectorAll('[data-t]').forEach(el => {
+      const t = parseInt(el.dataset.t, 10);
+      if (!t) return;
+      const m = Math.max(Math.floor((t - now)/60000), 0);
+      const numEl = el.querySelector('.num');
+      if (numEl && numEl.textContent !== String(m)) numEl.textContent = String(m);
+    });
+  }
+
+  // ---------- Journey planner (Transitous / MOTIS) ----------
+  // Transitous is volunteer-run and asks that resource-intensive endpoints
+  // (routing) not be hammered, so results are cached and requests throttled.
+  // Attribution is shown in the panel, as their policy requires.
+  const TRANSITOUS = "https://api.transitous.org/api";
+  const planCache = {};   // key -> { at, data }
+  const geoCache = {};    // text -> place
+  const PLAN_CACHE_MS = 60000;
+  const GEO_CACHE_MS = 15 * 60000;
+  let planBusy = false;
+  let favRoutes = [];
+  let whenArriveBy = false;   // false = depart at, true = arrive by
+
+  async function transitousFetch(path){
+    const res = await fetch(TRANSITOUS + path, { headers: { "Accept": "application/json" } });
+    const text = await res.text();
+    let data;
+    try{ data = JSON.parse(text); }catch(e){ data = text; }
+    if (!res.ok) throw new Error("HTTP " + res.status + ": " + (typeof data === "string" ? data.slice(0,160) : JSON.stringify(data).slice(0,160)));
+    return data;
+  }
+
+  async function geocodePlace(text){
+    const q = text.trim();
+    if (!q) return null;
+    const hit = geoCache[q.toLowerCase()];
+    if (hit && Date.now() - hit.at < GEO_CACHE_MS) return hit.place;
+    const data = await transitousFetch("/v1/geocode?text=" + encodeURIComponent(q) + "&language=cs");
+    const list = Array.isArray(data) ? data : (data && Array.isArray(data.places) ? data.places : []);
+    // Prefer actual stops over addresses for a transit search.
+    const stop = list.find(p => p && (p.type === "STOP" || p.type === "stop")) || list[0];
+    if (!stop) return null;
+    const place = {
+      name: stop.name || q,
+      id: stop.id || null,
+      lat: (typeof stop.lat === "number") ? stop.lat : null,
+      lon: (typeof stop.lon === "number") ? stop.lon : null
+    };
+    geoCache[q.toLowerCase()] = { at: Date.now(), place };
+    return place;
+  }
+
+  function placeParam(p){
+    if (p.id) return p.id;
+    if (typeof p.lat === "number" && typeof p.lon === "number") return p.lat + "," + p.lon;
+    return null;
+  }
+
+  // Empty time field means "now". A time earlier than now is taken as
+  // tomorrow, which is what people mean by "the 6:10 connection" at night.
+  function plannedTime(){
+    const v = $("planTime").value;
+    if (!v) return new Date();
+    const [h, m] = v.split(":").map(n => parseInt(n, 10));
+    if (isNaN(h) || isNaN(m)) return new Date();
+    const t = new Date();
+    t.setHours(h, m, 0, 0);
+    if (t.getTime() < Date.now() - 60000) t.setDate(t.getDate() + 1);
+    return t;
+  }
+
+  async function planJourney(fromText, toText){
+    const [from, to] = await Promise.all([geocodePlace(fromText), geocodePlace(toText)]);
+    if (!from) throw new Error('Nenašel jsem zastávku "' + fromText + '".');
+    if (!to) throw new Error('Nenašel jsem zastávku "' + toText + '".');
+    const fp = placeParam(from), tp = placeParam(to);
+    if (!fp || !tp) throw new Error("Zastávce chybí poloha, zkus jiný název.");
+
+    const key = fp + ">" + tp + "@" + plannedTime().getTime() + (whenArriveBy ? "A" : "D");
+    const cached = planCache[key];
+    if (cached && Date.now() - cached.at < PLAN_CACHE_MS){
+      return { from, to, itineraries: cached.data };
+    }
+
+    const params = new URLSearchParams();
+    params.append("fromPlace", fp);
+    params.append("toPlace", tp);
+    params.append("time", plannedTime().toISOString());
+    params.append("arriveBy", whenArriveBy ? "true" : "false");
+    // MOTIS has both v1 and v2 plan endpoints; try both rather than guess.
+    let data = null, lastErr = null;
+    for (const ver of ["/v1/plan?", "/v2/plan?"]){
+      try{
+        data = await transitousFetch(ver + params.toString());
+        if (data) break;
+      }catch(e){ lastErr = e; data = null; }
+    }
+    if (!data) throw (lastErr || new Error("Vyhledávání spojení selhalo."));
+    lastDebug = { endpoint: "transitous plan", query: params.toString(), data };
+
+    const itineraries = parseItineraries(data);
+    if (!itineraries.length) throw new Error("Žádné spojení se nenašlo.");
+    planCache[key] = { at: Date.now(), data: itineraries };
+    return { from, to, itineraries };
+  }
+
+  function parseItineraries(data){
+    const raw = (data && Array.isArray(data.itineraries)) ? data.itineraries
+              : (data && data.plan && Array.isArray(data.plan.itineraries)) ? data.plan.itineraries
+              : [];
+    return raw.map(it => {
+      const legs = (Array.isArray(it.legs) ? it.legs : []).map(l => {
+        const mode = String(l.mode || "").toUpperCase();
+        return {
+          mode,
+          walk: mode === "WALK" || mode === "FOOT",
+          line: l.routeShortName || l.route_short_name || (l.route && l.route.shortName) || "",
+          headsign: l.headsign || l.tripHeadsign || "",
+          fromName: (l.from && l.from.name) || "",
+          toName: (l.to && l.to.name) || "",
+          start: l.startTime ? new Date(l.startTime) : null,
+          end: l.endTime ? new Date(l.endTime) : null
+        };
+      }).filter(l => l.start && l.end);
+      if (!legs.length) return null;
+      const transfers = legs.filter(l => !l.walk).length - 1;
+      return {
+        start: legs[0].start,
+        end: legs[legs.length-1].end,
+        transfers: Math.max(transfers, 0),
+        legs
+      };
+    }).filter(Boolean).sort((a,b) => a.start - b.start).slice(0, 5);
+  }
+
+  function renderPlanResults(result){
+    const el = $("planResults");
+    if (!result){ el.innerHTML = ""; return; }
+    el.innerHTML = result.itineraries.map(it => {
+      const mins = Math.round((it.end - it.start)/60000);
+      return '<div class="itin">' +
+        '<div class="itin-head">' +
+          '<span class="itin-time">' + fmtTime(it.start) + ' → ' + fmtTime(it.end) + '</span>' +
+          '<span class="itin-meta">' + mins + ' min · ' +
+            (it.transfers === 0 ? 'bez přestupu' : it.transfers + '× přestup') + '</span>' +
+        '</div>' +
+        '<div class="itin-legs">' +
+          it.legs.map(l => {
+            if (l.walk){
+              const wm = Math.max(Math.round((l.end - l.start)/60000), 1);
+              return '<div class="leg"><span class="leg-time">' + fmtTime(l.start) + '</span>' +
+                '<span class="leg-name leg-walk">pěšky ' + wm + ' min</span></div>';
+            }
+            return '<div class="leg">' +
+              '<span class="leg-time">' + fmtTime(l.start) + '</span>' +
+              '<span class="line-chip sm" style="--line-color:' + lineColor(l.line) + '">' + escapeHtml(l.line || "?") + '</span>' +
+              '<span class="leg-name">' + escapeHtml(l.fromName) + ' → ' + escapeHtml(l.toName) + '</span>' +
+            '</div>';
+          }).join("") +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  async function doPlanSearch(){
+    if (planBusy) return;
+    const fromText = $("planFrom").value.trim();
+    const toText = $("planTo").value.trim();
+    if (!fromText || !toText){ showToast("Vyplň odkud a kam."); return; }
+    planBusy = true;
+    // Dismiss the keyboard so the results aren't hidden behind it.
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    $("planResults").innerHTML = '<p class="card-sub">Hledám spojení…</p>';
+    try{
+      const result = await planJourney(fromText, toText);
+      renderPlanResults(result);
+      collapsePlanForm(fromText, toText);
+      scrollPlanResultsIntoView();
+    }catch(e){
+      const msg = (e && e.message) || String(e);
+      $("planResults").innerHTML = '<p class="card-sub" style="color:var(--miss)">' + escapeHtml(msg) + '</p>';
+      scrollPlanResultsIntoView();
+    }
+    planBusy = false;
+  }
+
+  // The search form is tall, so once results arrive it collapses into a one
+  // line summary. Collapsing (rather than just scrolling) is what actually
+  // frees the screen: with few results the page isn't long enough to scroll
+  // the form out of view anyway.
+  function collapsePlanForm(fromText, toText){
+    $("planSummaryText").textContent = fromText + " → " + toText;
+    $("planSummary").hidden = false;
+    $("planForm").hidden = true;
+    $("favList").hidden = true;
+  }
+
+  function expandPlanForm(){
+    $("planSummary").hidden = true;
+    $("planForm").hidden = false;
+    $("favList").hidden = false;
+  }
+
+  function scrollPlanResultsIntoView(){
+    requestAnimationFrame(() => {
+      const el = $("planResults");
+      if (!el || !el.firstElementChild) return;
+      const delta = el.getBoundingClientRect().top - 8;
+      if (Math.abs(delta) > 4) window.scrollBy({ top: delta, behavior: "smooth" });
+    });
+  }
+
+  function renderQuickChips(){
+    const stops = Array.from(new Set(cards.map(c => c.stopName).filter(Boolean)));
+    [["planFromChips","planFrom"],["planToChips","planTo"]].forEach(([chipsId, inputId]) => {
+      const box = $(chipsId);
+      box.innerHTML = "";
+      stops.forEach(name => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "quick-chip";
+        b.textContent = name;
+        b.addEventListener("click", () => { $(inputId).value = name; });
+        box.appendChild(b);
+      });
+    });
+  }
+
+  // The Transitous policy accepts the Referer header in place of a
+  // User-Agent for browser apps, provided the page shows contact details.
+  function renderAttribution(){
+    $("attribApp").textContent = APP_NAME + " v" + APP_VERSION;
+    $("attribContact").innerHTML = '— kontakt: <a href="mailto:' + APP_CONTACT + '">' + APP_CONTACT + '</a>';
+  }
+
+  // Keyboard handling shared by every text field: the confirm key runs the
+  // field's action and closes the keyboard; Escape cancels and closes it
+  // without acting. Without this you had to tap outside or press Back.
+  function wireField(input, onConfirm, opts){
+    opts = opts || {};
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter"){
+        e.preventDefault();
+        if (opts.nextField){
+          // "next" fields hand focus on rather than closing the keyboard.
+          const nxt = $(opts.nextField);
+          if (nxt){ nxt.focus(); return; }
+        }
+        input.blur();               // dismiss the keyboard
+        if (onConfirm) onConfirm();
+      } else if (e.key === "Escape"){
+        e.preventDefault();
+        if (opts.revert !== false) input.value = input.dataset.prevValue || "";
+        input.blur();
+      }
+    });
+    // Remember the value on focus so Escape can restore it.
+    input.addEventListener("focus", () => { input.dataset.prevValue = input.value; });
+  }
+
+  function switchTab(which){
+    const dep = which === "dep";
+    $("panelDep").hidden = !dep;
+    $("panelPlan").hidden = dep;
+    $("tabBtnDep").classList.toggle("active", dep);
+    $("tabBtnPlan").classList.toggle("active", !dep);
+    $("tabBtnDep").setAttribute("aria-selected", String(dep));
+    $("tabBtnPlan").setAttribute("aria-selected", String(!dep));
+    if (!dep){ renderQuickChips(); renderAttribution(); }
+    else expandPlanForm();
+  }
+
+  // ---------- Favourite connections ----------
+  function renderFavs(){
+    const box = $("favList");
+    box.innerHTML = "";
+    favRoutes.forEach(f => {
+      const chip = document.createElement("div");
+      chip.className = "fav-chip";
+      chip.innerHTML = '<span class="txt">★ ' + escapeHtml(f.from) + ' → ' + escapeHtml(f.to) + '</span>';
+      chip.addEventListener("click", () => {
+        $("planFrom").value = f.from;
+        $("planTo").value = f.to;
+        doPlanSearch();
+      });
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "fav-del";
+      del.textContent = "✕";
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        favRoutes = favRoutes.filter(x => x.id !== f.id);
+        saveJSON("favRoutes", favRoutes);
+        renderFavs();
+      });
+      chip.appendChild(del);
+      box.appendChild(chip);
+    });
+  }
+
+  async function saveFav(){
+    const from = $("planFrom").value.trim();
+    const to = $("planTo").value.trim();
+    if (!from || !to){ showToast("Vyplň odkud a kam."); return; }
+    const dup = favRoutes.some(f =>
+      f.from.toLowerCase() === from.toLowerCase() && f.to.toLowerCase() === to.toLowerCase());
+    if (dup){ showToast("Tohle spojení už v oblíbených máš."); return; }
+    favRoutes.push({ id: "f_" + Date.now(), from, to });
+    const ok = await saveJSON("favRoutes", favRoutes);
+    if (!ok){ favRoutes.pop(); return; }
+    showToast("Přidáno do oblíbených.");
+    renderFavs();
+  }
+
+  // ---------- Backup ----------
+  function buildBackup(){
+    return JSON.stringify({
+      v: 1,
+      savedAt: new Date().toISOString(),
+      settings, cards, favRoutes
+    }, null, 1);
+  }
+
+  async function doExport(){
+    const text = buildBackup();
+    const box = $("backupBox");
+    box.hidden = false;
+    box.value = text;
+    try{
+      await navigator.clipboard.writeText(text);
+      showToast("Záloha zkopírována do schránky.");
+    }catch(e){
+      box.select();
+      showToast("Zkopíruj text z pole níž.");
+    }
+  }
+
+  async function doImport(){
+    const box = $("backupBox");
+    if (box.hidden || !box.value.trim()){
+      box.hidden = false;
+      showToast("Vlož zálohu do pole a zkus to znovu.");
+      return;
+    }
+    let data;
+    try{ data = JSON.parse(box.value); }
+    catch(e){ showToast("Záloha není platná."); return; }
+    if (!data || typeof data !== "object"){ showToast("Záloha není platná."); return; }
+    if (Array.isArray(data.cards)) cards = data.cards;
+    if (Array.isArray(data.favRoutes)) favRoutes = data.favRoutes;
+    if (data.settings && typeof data.settings === "object") settings = data.settings;
+    await saveJSON("cards", cards);
+    await saveJSON("favRoutes", favRoutes);
+    await saveJSON("settings", settings);
+    box.hidden = true; box.value = "";
+    $("settingsPanel").hidden = true;
+    showToast("Obnoveno ze zálohy.");
+    renderDeck();
+    renderFavs();
+    refreshAllCards();
+  }
+
+  // ---------- Settings ----------
+  function wireSettings(){
+    $("btnSettings").addEventListener("click", () => {
+      $("inputApiKey").value = settings.golemioKey;
+      $("settingsPanel").hidden = false;
+    });
+    $("btnCloseSettings").addEventListener("click", () => $("settingsPanel").hidden = true);
+    $("btnToggleKey").addEventListener("click", () => {
+      const inp = $("inputApiKey");
+      inp.type = inp.type === "password" ? "text" : "password";
+    });
+    $("btnSaveSettings").addEventListener("click", async () => {
+      settings.golemioKey = $("inputApiKey").value.trim();
+      await saveJSON("settings", settings);
+      renderAttribution();
+      $("settingsPanel").hidden = true;
+      showToast("Nastavení uloženo.");
+      refreshAllCards();
+    });
+    $("btnToggleDebug").addEventListener("click", () => {
+      const el = $("debugRaw");
+      el.hidden = !el.hidden;
+      if (!el.hidden) el.textContent = lastDebug ? JSON.stringify(lastDebug, null, 2) : "Zatím žádný požadavek na API.";
+    });
+
+    wireField($("addStopInput"), searchAddStop);
+    wireField($("addNameInput"), null, { nextField: "addStopInput" });
+    $("btnAddStopSearch").addEventListener("click", searchAddStop);
+
+    $("tabBtnDep").addEventListener("click", () => switchTab("dep"));
+    $("tabBtnPlan").addEventListener("click", () => switchTab("plan"));
+    $("btnPlanSearch").addEventListener("click", doPlanSearch);
+    $("btnFavSave").addEventListener("click", saveFav);
+    $("btnPlanEdit").addEventListener("click", expandPlanForm);
+    $("btnWhenMode").addEventListener("click", () => {
+      whenArriveBy = !whenArriveBy;
+      $("btnWhenMode").textContent = whenArriveBy ? "Příjezd do" : "Odjezd v";
+    });
+    $("btnWhenNow").addEventListener("click", () => {
+      $("planTime").value = "";
+      whenArriveBy = false;
+      $("btnWhenMode").textContent = "Odjezd v";
+      showToast("Hledám od aktuálního času.");
+    });
+    $("btnExport").addEventListener("click", doExport);
+    $("btnImport").addEventListener("click", doImport);
+    $("btnPlanSwap").addEventListener("click", () => {
+      const a = $("planFrom").value;
+      $("planFrom").value = $("planTo").value;
+      $("planTo").value = a;
+    });
+    wireField($("planFrom"), null, { nextField: "planTo" });
+    wireField($("planTo"), doPlanSearch);
+    wireField($("planTime"), null);
+    wireField($("inputApiKey"), null, { revert: false });
+  }
+
+  // ---------- Init ----------
+  async function init(){
+    if (!storageAvailable()){
+      $("storageWarning").hidden = false;
+    }
+    const loadedSettings = await loadJSON("settings", settings);
+    settings = { golemioKey: (loadedSettings && loadedSettings.golemioKey) || "" };
+    cards = await loadJSON("cards", []);
+    favRoutes = await loadJSON("favRoutes", []);
+    vehicleNumCache = await loadJSON("vehicleNums", {}) || {};
+    // Drop stale trips so this cache can't grow forever.
+    const cutoff = Date.now() - VEHICLE_TTL_MS;
+    let pruned = false;
+    Object.keys(vehicleNumCache).forEach(k => {
+      const e = vehicleNumCache[k];
+      if (!e || typeof e.at !== "number" || e.at < cutoff){ delete vehicleNumCache[k]; pruned = true; }
+    });
+    if (pruned) saveJSON("vehicleNums", vehicleNumCache);
+    // Stop names are cached to avoid hammering the API, but PID timetable
+    // changes can rename stops — so the cache is dropped periodically and
+    // rebuilt from fresh data rather than being trusted forever.
+    const cacheMeta = await loadJSON("stopNamesMeta", null);
+    const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+    if (cacheMeta && cacheMeta.savedAt && (Date.now() - cacheMeta.savedAt) < CACHE_TTL_MS){
+      stopNameCache = await loadJSON("stopNames", {}) || {};
+      stopCacheStamped = true; // keep the original expiry date
+    } else {
+      stopNameCache = {};
+      stopCacheStamped = false; // next save starts a fresh 30-day window
+    }
+    // Migrate cards saved by the previous version (one locked-in line each)
+    // to the new format (a stop with a growable, excludable set of lines).
+    let migrated = false;
+    cards.forEach(c => {
+      if (!c.knownLines){
+        c.knownLines = (c.line) ? [{ line: c.line, headsign: c.headsign || "" }] : [];
+        c.excludedKeys = c.excludedKeys || [];
+        delete c.line; delete c.headsign;
+        migrated = true;
+      }
+    });
+    if (migrated) saveJSON("cards", cards);
+    nativeMirror("settings", settings);
+    nativeMirror("cards", cards);
+
+    wireSettings();
+    $("deck").addEventListener("scroll", () => {
+      clearTimeout(updateActiveDot._t);
+      updateActiveDot._t = setTimeout(updateActiveDot, 80);
+      clearTimeout(saveLastViewed._t);
+      saveLastViewed._t = setTimeout(saveLastViewed, 400);
+    });
+    renderDeck();
+    renderFavs();
+    renderAttribution();
+    window.addEventListener("online", updateOnlineState);
+    window.addEventListener("offline", updateOnlineState);
+    restoreLastViewed();
+    // updateOnlineState() refreshes by itself when online, so it must not be
+    // paired with a second refreshAllCards() here — that doubled every
+    // launch's API traffic.
+    updateOnlineState();
+    setInterval(refreshAllCards, 25000);
+    setInterval(tickCountdowns, 5000);
+  }
+
+  function updateOnlineState(){
+    const off = (navigator.onLine === false);
+    $("offlineBanner").hidden = !off;
+    if (!off) refreshAllCards();
+  }
+
+  async function saveLastViewed(){
+    const deck = $("deck");
+    const cardEls = deck.querySelectorAll(".card");
+    const center = deck.scrollLeft + deck.clientWidth/2;
+    let closest = null, closestDist = Infinity;
+    cardEls.forEach(el => {
+      const mid = el.offsetLeft + el.offsetWidth/2;
+      const dist = Math.abs(mid - center);
+      if (dist < closestDist){ closestDist = dist; closest = el.dataset.id || null; }
+    });
+    if (closest) saveJSON("lastViewedId", closest);
+  }
+
+  async function restoreLastViewed(){
+    const id = await loadJSON("lastViewedId", null);
+    if (!id) return;
+    const el = $("deck").querySelector('[data-id="' + id + '"]');
+    if (el) el.scrollIntoView({ behavior: "auto", inline: "center" });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

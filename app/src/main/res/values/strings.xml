@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Stihnu to?</string>
+    <string name="widget_label">Stihnu to? — odjezdy</string>
+    <string name="widget_description">Nejbližší odjezdy z vybrané karty</string>
+    <string name="widget_pick_title">Vyber kartu pro widget</string>
+</resources>
