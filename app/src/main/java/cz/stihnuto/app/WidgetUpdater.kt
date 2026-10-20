@@ -61,6 +61,18 @@ object WidgetUpdater {
             renderAll(c)
             return
         }
+        // Automatic refreshes while the screen is off would mostly hit Doze /
+        // app-standby, where Android cuts background network ("Unable to
+        // resolve host"). Skip them — the cached list and the countdowns keep
+        // working, and the next refresh after wake-up fetches fresh data.
+        if (!force && !Net.isScreenOn(c)) {
+            renderAll(c)
+            return
+        }
+        if (!Net.isOnline(c)) {
+            renderAll(c, if (force) "bez připojení" else null)
+            return
+        }
         if (force) renderAll(c, "načítám…")
 
         val stops = ids.toList().mapNotNull { Store.card(c, Store.widgetCard(c, it))?.stopName }.distinct()
@@ -70,12 +82,28 @@ object WidgetUpdater {
             val cached = Store.departures(c, stop)
             if (!force && cached != null && now - cached.fetchedAt < MIN_FETCH_GAP_MS) continue
             try {
-                Store.saveDepartures(c, stop, Golemio.fetchDepartures(key, stop))
+                Store.saveDepartures(c, stop, fetchWithRetry(key, stop))
+            } catch (e: Golemio.NetworkException) {
+                error = "bez připojení"
             } catch (e: Exception) {
-                error = e.message ?: "chyba sítě"
+                error = "chyba: " + (e.message ?: "neznámá")
             }
         }
-        renderAll(c, error?.let { "chyba: $it" })
+        renderAll(c, error)
+    }
+
+    /**
+     * Right after the phone wakes up the network is often not usable for a
+     * second or two — DNS fails even though a connection is reported. One
+     * delayed retry covers that.
+     */
+    private fun fetchWithRetry(key: String, stop: String): List<Departure> {
+        return try {
+            Golemio.fetchDepartures(key, stop)
+        } catch (e: Golemio.NetworkException) {
+            Thread.sleep(3_000L)
+            Golemio.fetchDepartures(key, stop)
+        }
     }
 
     /** True when some widget is running out of departures and its data is old. */
@@ -114,9 +142,9 @@ object WidgetUpdater {
 
         val now = System.currentTimeMillis()
         val cache = Store.departures(c, card.stopName)
-        val updated = if (cache != null) "aktualizováno " + clock(cache.fetchedAt) else "zatím bez dat"
+        val updated = if (cache != null) "data z " + clock(cache.fetchedAt) else "zatím bez dat"
         v.setTextViewText(R.id.title, card.name)
-        v.setTextViewText(R.id.subtitle, card.stopName + " · " + (status ?: updated))
+        v.setTextViewText(R.id.subtitle, card.stopName + " · " + (if (status != null) "$status · $updated" else updated))
 
         if (Store.apiKey(c).isEmpty()) {
             message(v, "Chybí Golemio API klíč — vlož ho v aplikaci (⚙).")

@@ -1,6 +1,7 @@
 package cz.stihnuto.app
 
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -12,11 +13,22 @@ object Golemio {
 
     class ApiException(message: String) : Exception(message)
 
+    /** No usable connection: DNS failure, timeout, connection reset, … */
+    class NetworkException(cause: Throwable) : Exception(cause.message, cause)
+
     fun fetchDepartures(apiKey: String, stopName: String): List<Departure> {
         val query = "names=" + URLEncoder.encode(stopName, "UTF-8") +
             "&preferredTimezone=" + URLEncoder.encode("Europe/Prague", "UTF-8") +
             "&includeMetroTrains=true&limit=60"
         val url = URL("https://api.golemio.cz/v2/pid/departureboards/?$query")
+        try {
+            return request(url, apiKey)
+        } catch (e: IOException) {
+            throw NetworkException(e)
+        }
+    }
+
+    private fun request(url: URL, apiKey: String): List<Departure> {
         val conn = url.openConnection() as HttpURLConnection
         try {
             conn.connectTimeout = 10_000
