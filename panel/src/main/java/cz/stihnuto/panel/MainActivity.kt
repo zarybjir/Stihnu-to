@@ -56,6 +56,12 @@ class MainActivity : Activity() {
         }
         buildPages()
 
+        val prefs = getSharedPreferences("panel", MODE_PRIVATE)
+        if (!prefs.getBoolean("home_offered", false)) {
+            prefs.edit().putBoolean("home_offered", true).apply()
+            app.main.postDelayed({ Updater.setHome(this, true) }, 1500)
+        }
+
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED &&
             "claude" in ids
         ) {

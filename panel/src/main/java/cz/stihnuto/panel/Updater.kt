@@ -53,6 +53,27 @@ object Updater {
 
     fun update(app: App) = install(app, catalog.first { it.key == "panel" })
 
+    // --- Panel jako hlavní (domovská) obrazovka hodin -------------------
+
+    private fun homeAlias(ctx: Context) =
+        android.content.ComponentName(ctx, "cz.stihnuto.panel.HomeAlias")
+
+    fun isHomeEnabled(ctx: Context) = ctx.packageManager.getComponentEnabledSetting(homeAlias(ctx)) ==
+        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+
+    /** Zapne/vypne panel jako domovskou obrazovku a otevře volbu, kterou Android nabídne. */
+    fun setHome(ctx: Context, enabled: Boolean) {
+        ctx.packageManager.setComponentEnabledSetting(
+            homeAlias(ctx),
+            if (enabled) android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            else android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            android.content.pm.PackageManager.DONT_KILL_APP,
+        )
+        ctx.startActivity(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }
+
     fun installedVersion(ctx: Context, pkg: String): String? = try {
         ctx.packageManager.getPackageInfo(pkg, 0).versionName ?: "?"
     } catch (e: Exception) {

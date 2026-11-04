@@ -64,6 +64,25 @@ class AppsPage(ctx: Context) : Page(ctx) {
             }
             list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
         }
+        val home = Updater.isHomeEnabled(ctx)
+        val homeRow = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+        }
+        val homeCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        homeCol.addView(Ui.text(ctx, "Hlavní obrazovka", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+        homeCol.addView(Ui.text(ctx, if (home) "Panel je hlavní obrazovka. Původní hodiny se dají vrátit."
+            else "Hodiny se vrací na původní obrazovku. Nastav panel jako hlavní — v nabídce zvol Panel a „Vždy“.",
+            u * 4f, Ui.DIM))
+        homeRow.addView(homeCol, LinearLayout.LayoutParams(0, -2, 1f))
+        homeRow.addView(Ui.button(ctx, if (home) "Vrátit původní" else "Nastavit panel", u * 4.5f,
+            if (home) Ui.CARD_HI else Ui.ACCENT, if (home) Ui.TEXT else Ui.BG) {
+            Updater.setHome(ctx, !home)
+            app.main.postDelayed({ render() }, 500)
+        })
+        list.addView(homeRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
+
         list.addView(Ui.text(ctx, "Po stažení potvrď instalaci na displeji. Poprvé Android požádá o povolení " +
             "instalovat aplikace z Panelu — povol ho a vrať se zpět.", u * 3.8f, Ui.DIM),
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 4).toInt() })
