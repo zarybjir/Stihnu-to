@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
  *  - POST /api/page         {"page":"radar"}
  *  - POST /api/heating      {"room":"Obývák","target":22} nebo {"room":"…","on":false}
  *  - POST /api/media        {"action":"toggle|play|pause|next|previous|volume_up|volume_down"}
+ *  - POST /api/play         {"query":"Kryštof","kind":"song|album|playlist"} → YouTube Music
  *  - POST /api/open         {"app":"youtube_music","search":"…"}
  *  - POST /api/ask          {"text":"…"} → odpověď Clauda
  *
@@ -134,6 +135,12 @@ class WebServer(private val app: App, private val port: Int) {
                     else app.media.command(j.optString("action"))
                 }
                 json(out, JSONObject().put("ok", ok == true))
+            }
+            r.path == "/api/play" -> {
+                val j = r.json()
+                val hit = cz.stihnuto.panel.YtMusic.search(j.optString("query"), j.optString("kind", "song"))
+                val ok = hit != null && onMain { cz.stihnuto.panel.YtMusic.open(app, hit.url) } == true
+                json(out, JSONObject().put("ok", ok).put("title", hit?.title).put("url", hit?.url))
             }
             r.path == "/api/open" -> {
                 val j = r.json()

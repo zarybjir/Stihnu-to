@@ -116,6 +116,7 @@ class Assistant(private val app: App) {
         return """
             Jsi hlasový asistent na chytrých hodinách v domácnosti. Mluv česky.
             Odpovědi se čtou nahlas: jedna až dvě krátké věty, bez odrážek a bez markdownu.
+            Hudbu pouštěj nástrojem play_music, pauzu, další skladbu a hlasitost nástrojem media_control.
             Ovládáš panel nástroji. Než něco nastavíš, nemusíš se ptát — prostě to udělej a stručně potvrď.
             Když se ptají na počasí nebo stav domu, nejdřív zavolej get_status.
             Okna panelu: $pages.
@@ -140,6 +141,15 @@ class Assistant(private val app: App) {
             if (vol != null) { onMain { app.media.setVolume(vol) }; "Hlasitost $vol %." }
             else if (onMain { app.media.command(action) } == true) "Hotovo: $action."
             else "Nic nehraje, není co ovládat. Můžeš otevřít aplikaci nástrojem open_app."
+        }
+        "play_music" -> {
+            val q = input["query"]?.toString().orEmpty()
+            val kind = input["kind"]?.toString() ?: "song"
+            val hit = cz.stihnuto.panel.YtMusic.search(q, kind) ?: return "Na YouTube Music jsem „$q“ nenašel."
+            if (onMain { cz.stihnuto.panel.YtMusic.open(app, hit.url) } == true) {
+                app.main.postDelayed({ app.showPage("music") }, 4000)
+                "Pouštím: ${hit.title}${if (hit.subtitle.isNotBlank()) " (${hit.subtitle})" else ""}."
+            } else "YouTube Music ani SimpMusic nejsou nainstalované — nainstaluj SimpMusic v okně Aplikace."
         }
         "open_app" -> {
             val appKey = input["app"]?.toString() ?: ""
@@ -255,6 +265,15 @@ class Assistant(private val app: App) {
                         "action" to mapOf("type" to "string", "enum" to listOf("play", "pause", "toggle", "next", "previous", "volume_up", "volume_down")),
                         "volume_percent" to mapOf("type" to "integer", "description" to "Nastaví hlasitost 0–100 (místo action)."),
                     ),
+                ),
+                tool(
+                    "play_music", "Najde a pustí hudbu na YouTube Music (uživatel má Premium). Použij vždy, když chce pustit konkrétní písničku, interpreta, album nebo playlist.",
+                    mapOf(
+                        "query" to mapOf("type" to "string", "description" to "Co hledat, např. \"Lucie Medvídek\" nebo \"Kryštof\"."),
+                        "kind" to mapOf("type" to "string", "enum" to listOf("song", "album", "playlist", "any"),
+                            "description" to "song = konkrétní skladba nebo interpret (pak hraje mix), album, playlist."),
+                    ),
+                    listOf("query"),
                 ),
                 tool(
                     "open_app", "Otevře aplikaci na hodinách, volitelně rovnou s hledáním.",
