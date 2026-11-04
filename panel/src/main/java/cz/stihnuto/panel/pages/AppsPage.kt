@@ -128,6 +128,27 @@ class AppsPage(ctx: Context) : Page(ctx) {
         })
         list.addView(homeRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
 
+        // --- úložiště a úklid starých instalaček
+        val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+        val free = stat.availableBytes / 1_000_000
+        val total = stat.totalBytes / 1_000_000
+        val apks = downloadedApks()
+        val apkMb = apks.sumOf { it.length() } / 1_000_000
+        val sRow = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+        }
+        val sCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        sCol.addView(Ui.text(ctx, "Úložiště", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+        sCol.addView(Ui.text(ctx, "Volno ${"%.1f".format(free / 1000.0)} GB z ${"%.1f".format(total / 1000.0)} GB" +
+            if (apks.isNotEmpty()) " · staré instalačky: ${apks.size} ($apkMb MB)" else "", u * 4f, Ui.DIM))
+        storageMsg = Ui.text(ctx, storageNote, u * 4f, Ui.ACCENT).also { if (storageNote.isEmpty()) it.visibility = View.GONE }
+        sCol.addView(storageMsg)
+        sRow.addView(sCol, LinearLayout.LayoutParams(0, -2, 1f))
+        sRow.addView(Ui.button(ctx, "Smazat instalačky", u * 4.5f, Ui.CARD_HI) { cleanDownloads() })
+        list.addView(sRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
+
         list.addView(Ui.text(ctx, "Po stažení potvrď instalaci na displeji. Poprvé Android požádá o povolení " +
             "instalovat aplikace z Panelu — povol ho a vrať se zpět.", u * 3.8f, Ui.DIM),
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 4).toInt() })
@@ -193,6 +214,40 @@ class AppsPage(ctx: Context) : Page(ctx) {
             }, LinearLayout.LayoutParams((u * 24).toInt(), -2).apply { leftMargin = (u * 2).toInt() })
             list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1.5f).toInt() })
         }
+    }
+
+    private var storageMsg: TextView? = null
+    private var storageNote = ""
+
+    private fun note(t: String) {
+        storageNote = t
+        storageMsg?.apply { text = t; visibility = View.VISIBLE }
+    }
+
+    private fun downloadsDir() =
+        @Suppress("DEPRECATION") android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+
+    private fun downloadedApks(): List<java.io.File> = try {
+        downloadsDir().listFiles { f -> f.isFile && f.name.endsWith(".apk", true) }?.toList().orEmpty()
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /** Smaže .apk ze složky Stažené (zůstaly tam po instalaci přes prohlížeč). */
+    private fun cleanDownloads() {
+        val act = ctx as? android.app.Activity
+        val perm = android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+        if (ctx.checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            act?.requestPermissions(arrayOf(perm, android.Manifest.permission.READ_EXTERNAL_STORAGE), 7)
+            note("Povol přístup k souborům a klepni na Smazat znovu.")
+            return
+        }
+        val files = downloadedApks()
+        val mb = files.sumOf { it.length() } / 1_000_000
+        val deleted = files.count { it.delete() }
+        note(if (files.isEmpty()) "Ve složce Stažené nejsou žádné instalačky."
+        else "Smazáno $deleted z ${files.size} souborů ($mb MB).")
+        app.main.postDelayed({ render() }, 1500)
     }
 
     private var lastStatuses = ""
