@@ -14,7 +14,7 @@ import java.time.LocalDateTime
 /**
  * Hlavní okno: vlevo co největší čas (hodiny modře, minuty bíle), nad ním
  * datum, pod ním nejbližší událost. Vpravo úzký sloupec s předpovědí na
- * 8 hodin (ikona, šance na déšť, mm, teplota). Zároveň vzor pro nové okno.
+ * 12 hodin (ikona, teplota, šance na déšť, mm, vítr) a pod časem souhrn dne. Zároveň vzor pro nové okno.
  */
 class ClockPage(ctx: Context) : Page(ctx) {
     private val app = App.instance
@@ -47,8 +47,11 @@ class ClockPage(ctx: Context) : Page(ctx) {
         private val date = Ui.paint(Ui.TEXT, 1f, Ui.MEDIUM, Paint.Align.CENTER)
         private val chip = Ui.paint(Ui.TEXT, 1f, Ui.MEDIUM)
         private val hourLabel = Ui.paint(Ui.DIM, 1f, Ui.MEDIUM)
-        private val rain = Ui.paint(Ui.BLUE, 1f, Ui.MEDIUM, Paint.Align.CENTER)
-        private val mm = Ui.paint(Ui.DIM, 1f, Ui.REGULAR, Paint.Align.CENTER)
+        private val rain = Ui.paint(Ui.BLUE, 1f, Ui.MEDIUM, Paint.Align.RIGHT)
+        private val mm = Ui.paint(Ui.DIM, 1f, Ui.REGULAR, Paint.Align.RIGHT)
+        private val small = Ui.paint(Ui.DIM, 1f, Ui.REGULAR, Paint.Align.CENTER)
+        private val value2 = Ui.paint(Ui.TEXT, 1f, Ui.MEDIUM, Paint.Align.CENTER)
+        private val legend = Ui.paint(Ui.FAINT, 1f, Ui.REGULAR, Paint.Align.RIGHT)
         private val temp = Ui.paint(Ui.TEXT, 1f, Ui.MEDIUM, Paint.Align.RIGHT)
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
 
@@ -61,11 +64,11 @@ class ClockPage(ctx: Context) : Page(ctx) {
             val wx = app.weather.data
 
             // --- vpravo úzký sloupec s předpovědí
-            val colW = w * 0.235f
+            val colW = w * 0.29f
             val r1 = w - pad * 0.5f
             val r0 = r1 - colW
-            val t0 = pad * 0.7f
-            val t1 = h - pad * 0.7f
+            val t0 = pad * 0.5f
+            val t1 = h - pad * 0.9f
 
             // --- vlevo čas, velikost podle dostupné šířky (číslice Roboto mají stejnou šířku)
             val leftR = r0 - pad * 0.35f
@@ -80,7 +83,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
             }
             while (total() > leftR - leftL - pad * 0.25f && size > 10) size *= 0.99f
             val cap = size * 0.711f
-            val base = h * 0.5f + cap / 2
+            val base = h * 0.43f + cap / 2
             val realW = hours.measureText(hh) + minutes.measureText(mmText)
             val x0 = cx - realW / 2
             c.drawText(hh, x0, base, hours)
@@ -90,6 +93,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
             c.drawText(Ui.dateLong(now.toLocalDate()).replaceFirstChar { it.uppercase() }, cx, base - cap - h * 0.065f, date)
 
             // --- nejbližší událost
+            val chipY = base + h * 0.095f
             app.calendar.upcoming().firstOrNull()?.let { next ->
                 val today = LocalDate.now()
                 val day = when (next.start.toLocalDate()) {
@@ -102,7 +106,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 var t = "$day$time · ${next.title}"
                 while (chip.measureText(t) > (leftR - leftL) * 0.85f && t.length > 4) t = t.dropLast(2) + "…"
                 val pw = chip.measureText(t) + h * 0.085f
-                val cy = base + h * 0.095f
+                val cy = chipY
                 val l = cx - pw / 2
                 fill.color = Ui.CARD_HI
                 c.drawRoundRect(RectF(l, cy - h * 0.04f, l + pw, cy + h * 0.04f), h * 0.04f, h * 0.04f, fill)
@@ -111,33 +115,62 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 c.drawText(t, l + h * 0.056f, cy + h * 0.016f, chip)
             }
 
-            // --- předpověď na 8 hodin
-            val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(8)
+            // --- souhrn dne pod časem
+            wx?.days?.firstOrNull()?.let { d ->
+                val sun = if (d.sunset != null && now.isBefore(d.sunset)) "západ" to Ui.time(d.sunset)
+                else "východ" to (wx.days.getOrNull(1)?.sunrise?.let(Ui::time) ?: "–")
+                val info = listOf(
+                    "dnes" to "${Ui.deg(d.max)} / ${Ui.deg(d.min)}",
+                    "srážky" to "${Ui.num(d.precipSum)} mm",
+                    "vítr" to "až ${Math.round(d.windMax)} km/h",
+                    sun,
+                )
+                val iw = (leftR - leftL) / info.size
+                val iy = chipY + h * 0.13f
+                info.forEachIndexed { i, (label, value) ->
+                    val x = leftL + iw * i + iw / 2
+                    small.textSize = h * 0.03f
+                    c.drawText(label, x, iy, small)
+                    value2.textSize = h * 0.042f
+                    c.drawText(value, x, iy + h * 0.05f, value2)
+                }
+            }
+
+            // --- předpověď na 12 hodin
+            val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(12)
             if (hrs.isNullOrEmpty()) return
             fill.color = Ui.CARD
-            c.drawRoundRect(RectF(r0, t0, r1, t1), h * 0.045f, h * 0.045f, fill)
-            val rowH = (t1 - t0 - h * 0.02f) / hrs.size
+            c.drawRoundRect(RectF(r0, t0, r1, t1), h * 0.04f, h * 0.04f, fill)
+            val rowH = (t1 - t0 - h * 0.016f) / hrs.size
             hrs.forEachIndexed { i, hr ->
-                val y = t0 + h * 0.01f + i * rowH
+                val y = t0 + h * 0.008f + i * rowH
                 val m = y + rowH / 2
                 if (i == 0) {
                     fill.color = Ui.CARD_HI
-                    c.drawRoundRect(RectF(r0 + h * 0.01f, y + h * 0.003f, r1 - h * 0.01f, y + rowH - h * 0.003f),
-                        h * 0.035f, h * 0.035f, fill)
+                    c.drawRoundRect(RectF(r0 + h * 0.008f, y + h * 0.002f, r1 - h * 0.008f, y + rowH - h * 0.002f),
+                        rowH / 2, rowH / 2, fill)
                 }
-                hourLabel.textSize = h * 0.04f
+                if (hr.time.hour == 0 && i > 0) {
+                    fill.color = Ui.FAINT
+                    c.drawRect(r0 + h * 0.02f, y, r1 - h * 0.02f, y + 1.5f, fill)
+                }
+                hourLabel.textSize = h * 0.034f
                 hourLabel.color = if (i == 0) Ui.TEXT else Ui.DIM
-                c.drawText(if (i == 0) "teď" else "${hr.time.hour}", r0 + h * 0.035f, m + h * 0.014f, hourLabel)
-                WeatherIcon.draw(c, hr.code, hr.isDay, r0 + colW * 0.36f, m, h * 0.062f)
+                c.drawText(if (i == 0) "teď" else "${hr.time.hour}", r0 + h * 0.025f, m + h * 0.012f, hourLabel)
+                WeatherIcon.draw(c, hr.code, hr.isDay, r0 + colW * 0.25f, m, h * 0.05f)
+                temp.textSize = h * 0.038f
+                c.drawText(Ui.deg(hr.temp), r0 + colW * 0.44f, m + h * 0.013f, temp)
                 if (hr.precipProb >= 20 || hr.precip >= 0.1) {
-                    rain.textSize = h * 0.03f
-                    c.drawText("${hr.precipProb} %", r0 + colW * 0.63f, m - h * 0.002f, rain)
+                    rain.textSize = h * 0.028f
+                    c.drawText("${hr.precipProb}%", r0 + colW * 0.6f, m + h * 0.01f, rain)
                     mm.textSize = h * 0.026f
-                    c.drawText("${Ui.num(hr.precip)} mm", r0 + colW * 0.63f, m + h * 0.028f, mm)
+                    c.drawText(Ui.num(hr.precip), r0 + colW * 0.73f, m + h * 0.01f, mm)
                 }
-                temp.textSize = h * 0.046f
-                c.drawText(Ui.deg(hr.temp), r1 - h * 0.03f, m + h * 0.016f, temp)
+                mm.textSize = h * 0.026f
+                c.drawText("${Math.round(hr.wind)}", r1 - h * 0.022f, m + h * 0.01f, mm)
             }
+            legend.textSize = h * 0.022f
+            c.drawText("°C   srážky mm   vítr km/h", r1 - h * 0.022f, t1 + h * 0.032f, legend)
         }
     }
 }
