@@ -64,8 +64,10 @@ class ClockPage(ctx: Context) : Page(ctx) {
             val wx = app.weather.data
 
             // --- vpravo úzký sloupec s předpovědí
-            val colW = w * 0.29f
-            val r1 = w - pad * 0.5f
+            val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(12)
+            val anyRain = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
+            val colW = if (hrs.isNullOrEmpty()) 0f else h * (if (anyRain) 0.47f else 0.33f)
+            val r1 = w - pad * 0.9f
             val r0 = r1 - colW
             val t0 = pad * 0.5f
             val t1 = h - pad * 0.9f
@@ -126,18 +128,17 @@ class ClockPage(ctx: Context) : Page(ctx) {
                     sun,
                 )
                 val iw = (leftR - leftL) / info.size
-                val iy = chipY + h * 0.13f
+                val iy = if (app.calendar.upcoming().isNotEmpty()) chipY + h * 0.125f else chipY + h * 0.01f
                 info.forEachIndexed { i, (label, value) ->
                     val x = leftL + iw * i + iw / 2
-                    small.textSize = h * 0.03f
+                    small.textSize = h * 0.038f
                     c.drawText(label, x, iy, small)
-                    value2.textSize = h * 0.042f
-                    c.drawText(value, x, iy + h * 0.05f, value2)
+                    value2.textSize = h * 0.058f
+                    c.drawText(value, x, iy + h * 0.065f, value2)
                 }
             }
 
             // --- předpověď na 12 hodin
-            val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(12)
             if (hrs.isNullOrEmpty()) return
             fill.color = Ui.CARD
             c.drawRoundRect(RectF(r0, t0, r1, t1), h * 0.04f, h * 0.04f, fill)
@@ -157,20 +158,20 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 hourLabel.textSize = h * 0.034f
                 hourLabel.color = if (i == 0) Ui.TEXT else Ui.DIM
                 c.drawText(if (i == 0) "teď" else "${hr.time.hour}", r0 + h * 0.025f, m + h * 0.012f, hourLabel)
-                WeatherIcon.draw(c, hr.code, hr.isDay, r0 + colW * 0.25f, m, h * 0.05f)
+                WeatherIcon.draw(c, hr.code, hr.isDay, r0 + h * 0.11f, m, h * 0.05f)
                 temp.textSize = h * 0.038f
-                c.drawText(Ui.deg(hr.temp), r0 + colW * 0.44f, m + h * 0.013f, temp)
-                if (hr.precipProb >= 20 || hr.precip >= 0.1) {
+                c.drawText(Ui.deg(hr.temp), r0 + h * 0.215f, m + h * 0.013f, temp)
+                mm.textSize = h * 0.028f
+                c.drawText("${Math.round(hr.wind)}", r0 + h * 0.29f, m + h * 0.01f, mm)
+                if (anyRain && (hr.precipProb >= 20 || hr.precip >= 0.1)) {
                     rain.textSize = h * 0.028f
-                    c.drawText("${hr.precipProb}%", r0 + colW * 0.6f, m + h * 0.01f, rain)
+                    c.drawText("${hr.precipProb}%", r0 + h * 0.375f, m + h * 0.01f, rain)
                     mm.textSize = h * 0.026f
-                    c.drawText(Ui.num(hr.precip), r0 + colW * 0.73f, m + h * 0.01f, mm)
+                    c.drawText(Ui.num(hr.precip), r1 - h * 0.022f, m + h * 0.01f, mm)
                 }
-                mm.textSize = h * 0.026f
-                c.drawText("${Math.round(hr.wind)}", r1 - h * 0.022f, m + h * 0.01f, mm)
             }
             legend.textSize = h * 0.022f
-            c.drawText("°C   srážky mm   vítr km/h", r1 - h * 0.022f, t1 + h * 0.032f, legend)
+            c.drawText(if (anyRain) "°C · vítr km/h · déšť · mm" else "°C · vítr km/h", r1 - h * 0.022f, t1 + h * 0.032f, legend)
         }
     }
 }
