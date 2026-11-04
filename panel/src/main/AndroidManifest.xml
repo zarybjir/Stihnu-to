@@ -71,6 +71,20 @@
             android:name=".Updater$InstallResult"
             android:exported="false" />
 
+        <!-- Usnadnění: start po restartu, tlačítko zpět do panelu (hodiny nepovolí překrytí). -->
+        <service
+            android:name=".PanelAccessibility"
+            android:exported="true"
+            android:label="Panel"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility" />
+        </service>
+
         <!-- Přístup k přehrávání jiných aplikací (YouTube Music). -->
         <service
             android:name=".MediaListener"

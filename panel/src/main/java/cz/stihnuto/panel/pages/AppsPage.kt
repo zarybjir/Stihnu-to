@@ -101,7 +101,7 @@ class AppsPage(ctx: Context) : Page(ctx) {
         val ovlCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         ovlCol.addView(Ui.text(ctx, "Návrat do panelu", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
         ovlCol.addView(Ui.text(ctx, if (ovl) "Zapnuto: tlačítko zpět přes jiné aplikace, spuštění po restartu, návrat po nečinnosti."
-            else "Povol „Zobrazení přes jiné aplikace“ — pak se panel spustí i po restartu a z YouTube se vrátíš tlačítkem v rohu.",
+            else "Zapni službu Panel v Usnadnění: v seznamu klepni na Panel → zapnout → Povolit. Pak se panel spustí po restartu a z YouTube se vrátíš tlačítkem v rohu.",
             u * 4f, Ui.DIM))
         ovlRow.addView(ovlCol, LinearLayout.LayoutParams(0, -2, 1f))
         if (!ovl) ovlRow.addView(Ui.button(ctx, "Povolit", u * 4.5f, Ui.ACCENT, Ui.BG) {

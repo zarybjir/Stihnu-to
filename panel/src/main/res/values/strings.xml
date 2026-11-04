@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_description">Panel: spustí se po zapnutí hodin, přes jiné aplikace ukáže tlačítko zpět do panelu a po chvíli nečinnosti se do panelu vrátí. Nic nečte ani nesleduje.</string>
+</resources>

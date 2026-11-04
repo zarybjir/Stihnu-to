@@ -60,8 +60,8 @@ class MainActivity : Activity() {
         if (!prefs.getBoolean("home_offered", false)) {
             prefs.edit().putBoolean("home_offered", true).apply()
             app.main.postDelayed({ Updater.setHome(this, true) }, 1500)
-        } else if (!Overlay.allowed(this) && !prefs.getBoolean("overlay_asked", false)) {
-            prefs.edit().putBoolean("overlay_asked", true).apply()
+        } else if (!Overlay.allowed(this) && !prefs.getBoolean("accessibility_asked", false)) {
+            prefs.edit().putBoolean("accessibility_asked", true).apply()
             app.main.postDelayed({ Overlay.requestPermission(this) }, 1500)
         }
 

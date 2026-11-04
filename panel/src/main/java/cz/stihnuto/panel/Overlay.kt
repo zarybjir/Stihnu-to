@@ -1,48 +1,52 @@
 package cz.stihnuto.panel
 
+import android.accessibilityservice.AccessibilityService
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PixelFormat
-import android.net.Uri
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityEvent
 
 /**
- * Hodiny nemají tlačítko Domů. Když je panel schovaný (běží YouTube Music,
- * nebo se hodiny vrátily na původní ciferník), ukáže se v rohu malé
- * tlačítko zpět do panelu. Po pár minutách bez hudby se panel vrátí sám.
- * Vyžaduje oprávnění „Zobrazení přes jiné aplikace“.
+ * Hodiny nemají tlačítko Domů a „Zobrazení přes jiné aplikace“ na nich kvůli
+ * malé paměti nejde zapnout. Proto panel používá službu Usnadnění (stejně
+ * jako čtečka obrazovky). Když je zapnutá:
+ *  - po restartu hodin spustí panel,
+ *  - přes jiné aplikace ukáže v rohu tlačítko zpět do panelu,
+ *  - když nic nehraje, po pár minutách se do panelu vrátí sama.
  */
 object Overlay {
     private var button: View? = null
     @Volatile var panelVisible = false
     private var hiddenSince = 0L
+    internal var service: PanelAccessibility? = null
 
-    fun allowed(ctx: Context) = Settings.canDrawOverlays(ctx)
+    fun allowed(ctx: Context): Boolean {
+        if (service != null) return true
+        val enabled = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+        return enabled.contains(ComponentName(ctx, PanelAccessibility::class.java).flattenToShortString()) ||
+            enabled.contains(ComponentName(ctx, PanelAccessibility::class.java).flattenToString())
+    }
 
-    /** Otevře systémové nastavení oprávnění pro panel. */
+    /** Otevře nastavení Usnadnění, kde se zapne služba Panel. */
     fun requestPermission(ctx: Context) {
         try {
-            ctx.startActivity(
-                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        } catch (e: Exception) {
-            try {
-                ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (_: Exception) {
-            }
+            ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) {
         }
     }
 
     fun openPanel(ctx: Context) {
-        ctx.startActivity(
-            Intent(ctx, MainActivity::class.java)
+        val c: Context = service ?: ctx
+        c.startActivity(
+            Intent(c, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         )
     }
@@ -55,8 +59,7 @@ object Overlay {
     fun onPanelHidden(app: App) {
         panelVisible = false
         hiddenSince = System.currentTimeMillis()
-        // malá prodleva — při přepnutí uvnitř panelu (např. potvrzení instalace) neblikat
-        app.main.postDelayed({ if (!panelVisible) show(app) }, 1500)
+        app.main.postDelayed({ if (!panelVisible) show() }, 1500)
     }
 
     /** Kontrola každých 30 s: návrat do panelu, když nic nehraje. */
@@ -64,7 +67,7 @@ object Overlay {
         app.main.postDelayed(object : Runnable {
             override fun run() {
                 val idle = app.settings.idleMinutes
-                if (!panelVisible && idle > 0 && allowed(app) && !app.media.isPlaying &&
+                if (!panelVisible && idle > 0 && service != null && !app.media.isPlaying &&
                     System.currentTimeMillis() - hiddenSince > idle * 60_000L
                 ) {
                     openPanel(app)
@@ -74,14 +77,15 @@ object Overlay {
         }, 30_000)
     }
 
-    private fun show(app: App) {
-        if (button != null || !allowed(app)) return
-        val wm = app.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val size = (Ui.unit(app) * 13).toInt()
-        val v = BackButton(app)
+    internal fun show() {
+        val svc = service ?: return
+        if (button != null || panelVisible) return
+        val wm = svc.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val size = (Ui.unit(svc) * 13).toInt()
+        val v = BackButton(svc)
         val lp = WindowManager.LayoutParams(
             size, size,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
         ).apply {
@@ -97,7 +101,7 @@ object Overlay {
         }
     }
 
-    private fun hide() {
+    internal fun hide() {
         val v = button ?: return
         try {
             (v.context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).removeView(v)
@@ -132,5 +136,30 @@ object Overlay {
             }
             return true
         }
+    }
+}
+
+/** Služba Usnadnění: spuštění po restartu, tlačítko zpět, návrat do panelu. */
+class PanelAccessibility : AccessibilityService() {
+    override fun onServiceConnected() {
+        Overlay.service = this
+        // Po startu hodin (a po zapnutí služby) otevřít panel.
+        if (!Overlay.panelVisible) Overlay.openPanel(this)
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg == packageName) return
+        if (pkg == "com.android.systemui" || pkg.contains("inputmethod") || pkg.contains("keyboard")) return
+        if (!Overlay.panelVisible) Overlay.show()
+    }
+
+    override fun onInterrupt() {}
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        Overlay.hide()
+        Overlay.service = null
+        return super.onUnbind(intent)
     }
 }
