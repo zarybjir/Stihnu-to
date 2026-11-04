@@ -141,10 +141,17 @@ object Overlay {
 
 /** Služba Usnadnění: spuštění po restartu, tlačítko zpět, návrat do panelu. */
 class PanelAccessibility : AccessibilityService() {
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var connectedAt = 0L
+
     override fun onServiceConnected() {
         Overlay.service = this
-        // Po startu hodin (a po zapnutí služby) otevřít panel.
-        if (!Overlay.panelVisible) Overlay.openPanel(this)
+        connectedAt = System.currentTimeMillis()
+        // Po startu hodin (a po aktualizaci) otevřít panel. Hodiny si po startu
+        // ještě samy zapnou svůj ciferník přes něj, proto se to první minutu opakuje.
+        for (delay in listOf(0L, 4_000L, 10_000L, 20_000L, 35_000L, 60_000L)) {
+            handler.postDelayed({ if (!Overlay.panelVisible) Overlay.openPanel(this) }, delay)
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -152,7 +159,13 @@ class PanelAccessibility : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName) return
         if (pkg == "com.android.systemui" || pkg.contains("inputmethod") || pkg.contains("keyboard")) return
-        if (!Overlay.panelVisible) Overlay.show()
+        if (!Overlay.panelVisible) {
+            Overlay.show()
+            // krátce po startu: cokoli, co se ukáže přes panel, je ciferník hodin → zpět do panelu
+            if (System.currentTimeMillis() - connectedAt < 90_000L) {
+                handler.postDelayed({ if (!Overlay.panelVisible) Overlay.openPanel(this) }, 1500)
+            }
+        }
     }
 
     override fun onInterrupt() {}
