@@ -64,6 +64,23 @@ class AppsPage(ctx: Context) : Page(ctx) {
             }
             list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
         }
+        val ovl = cz.stihnuto.panel.Overlay.allowed(ctx)
+        val ovlRow = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+        }
+        val ovlCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        ovlCol.addView(Ui.text(ctx, "Návrat do panelu", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+        ovlCol.addView(Ui.text(ctx, if (ovl) "Zapnuto: tlačítko zpět přes jiné aplikace, spuštění po restartu, návrat po nečinnosti."
+            else "Povol „Zobrazení přes jiné aplikace“ — pak se panel spustí i po restartu a z YouTube se vrátíš tlačítkem v rohu.",
+            u * 4f, Ui.DIM))
+        ovlRow.addView(ovlCol, LinearLayout.LayoutParams(0, -2, 1f))
+        if (!ovl) ovlRow.addView(Ui.button(ctx, "Povolit", u * 4.5f, Ui.ACCENT, Ui.BG) {
+            cz.stihnuto.panel.Overlay.requestPermission(ctx)
+        })
+        list.addView(ovlRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
+
         val home = Updater.isHomeEnabled(ctx)
         val homeRow = LinearLayout(ctx).apply {
             gravity = Gravity.CENTER_VERTICAL

@@ -60,6 +60,9 @@ class MainActivity : Activity() {
         if (!prefs.getBoolean("home_offered", false)) {
             prefs.edit().putBoolean("home_offered", true).apply()
             app.main.postDelayed({ Updater.setHome(this, true) }, 1500)
+        } else if (!Overlay.allowed(this) && !prefs.getBoolean("overlay_asked", false)) {
+            prefs.edit().putBoolean("overlay_asked", true).apply()
+            app.main.postDelayed({ Overlay.requestPermission(this) }, 1500)
         }
 
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED &&
@@ -146,6 +149,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        Overlay.onPanelShown()
         hideSystemBars()
         pages[ids.getOrNull(index)]?.onShow()
         app.main.post(brightnessTick)
@@ -153,6 +157,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        Overlay.onPanelHidden(app)
         pages[ids.getOrNull(index)]?.onHide()
         app.main.removeCallbacks(brightnessTick)
     }

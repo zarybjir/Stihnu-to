@@ -48,6 +48,7 @@ class App : Application() {
         media = MediaRepo(this)
         calendar = CalendarRepo(this)
         radar = RadarRepo(this)
+        Overlay.startWatchdog(this)
         server = WebServer(this, 8080).also { it.start() }
     }
 
