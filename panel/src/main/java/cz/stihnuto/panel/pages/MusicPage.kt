@@ -42,6 +42,7 @@ class MusicPage(ctx: Context) : Page(ctx) {
     private val volume = Ui.text(ctx, "", u * 5f, Ui.DIM).apply { gravity = Gravity.CENTER }
     private val controls = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
     private val hint = Ui.text(ctx, "", u * 4.5f, Ui.DIM)
+    private val grant = Ui.button(ctx, "Povolit přístup k přehrávání", u * 5, Ui.ACCENT, Ui.BG) { openListenerSettings() }
 
     private val onMedia = { update() }
 
@@ -70,6 +71,7 @@ class MusicPage(ctx: Context) : Page(ctx) {
             LinearLayout.LayoutParams((u * 14).toInt(), (u * 14).toInt()))
         col.addView(controls, lp(top = u * 5))
         col.addView(hint, lp(top = u * 3))
+        col.addView(grant, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 3).toInt() })
 
         val apps = LinearLayout(ctx)
         apps.addView(Ui.button(ctx, "YouTube Music", u * 5) { open("youtube_music") })
@@ -81,6 +83,25 @@ class MusicPage(ctx: Context) : Page(ctx) {
     }
 
     private fun lp(top: Float) = LinearLayout.LayoutParams(-1, -2).apply { topMargin = top.toInt() }
+
+    /** Otevře systémové nastavení „Přístup k oznámením“ — přes něj Android povolí ovládat hudbu. */
+    private fun openListenerSettings() {
+        val intents = listOf(
+            android.content.Intent("android.settings.NOTIFICATION_LISTENER_DETAIL_SETTINGS")
+                .putExtra("android.provider.extra.NOTIFICATION_LISTENER_COMPONENT_NAME",
+                    android.content.ComponentName(ctx, cz.stihnuto.panel.MediaListener::class.java).flattenToString()),
+            android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+        )
+        for (i in intents) {
+            try {
+                ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            } catch (e: Exception) {
+                // zkusí další variantu
+            }
+        }
+        hint.text = "Nastavení oprávnění se na hodinách nedá otevřít. Půjde to přes počítač (adb)."
+    }
 
     private fun open(key: String) {
         if (!app.media.openApp(key)) {
@@ -95,14 +116,15 @@ class MusicPage(ctx: Context) : Page(ctx) {
             title.text = "Chybí oprávnění"
             artist.text = ""
             appLabel.text = ""
-            hint.text = "Povol panelu přístup k přehrávání:\n" +
-                "adb shell cmd notification allow_listener cz.stihnuto.panel/.MediaListener"
+            hint.text = "Klepni na tlačítko, v seznamu zapni „Panel“ a vrať se zpět."
             hint.gone(false)
+            grant.gone(false)
             controls.gone(true)
             art.setImageBitmap(null)
             return
         }
         controls.gone(false)
+        grant.gone(true)
         val t = m.title
         title.text = t ?: "Nic nehraje"
         artist.text = m.artist ?: if (t == null) "Spusť YouTube Music tlačítkem dole" else ""
