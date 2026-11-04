@@ -11,8 +11,9 @@ android {
         applicationId = "cz.stihnuto.panel"
         minSdk = 26
         targetSdk = 34
-        versionCode = 20
-        versionName = "0.20"
+        versionCode = 21
+        versionName = "0.21"
+        ndk { abiFilters += setOf("armeabi-v7a", "arm64-v8a") }
     }
 
     // Stálý podpisový klíč (GitHub secret PANEL_KEYSTORE_B64 + PANEL_KEYSTORE_PASSWORD).
@@ -63,4 +64,7 @@ android {
 dependencies {
     // Claude (hlasový asistent). Načítá se až při prvním dotazu.
     implementation("com.anthropic:anthropic-java:3.4.0")
+    // Hlasová aktivace „prosím Pepo“ — rozpoznávání řeči přímo v hodinách (offline)
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
+    implementation("com.alphacephei:vosk-android:0.3.75@aar")
 }

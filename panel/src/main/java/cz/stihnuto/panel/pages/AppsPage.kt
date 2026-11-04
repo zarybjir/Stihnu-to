@@ -92,6 +92,27 @@ class AppsPage(ctx: Context) : Page(ctx) {
             list.addView(kRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
         }
 
+        val vw = app.settings.voiceWake
+        val vRow = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+        }
+        val vCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        vCol.addView(Ui.text(ctx, "Hlasová aktivace „${app.settings.wakePhrase}“", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+        vCol.addView(Ui.text(ctx, "Řekni frázi a hned povel, např. „prosím Pepo, zatop v obýváku na 22“. Poslouchá se " +
+            "přímo v hodinách, Claudovi jde jen povel. Poprvé stáhne český model (46 MB).", u * 3.8f, Ui.DIM))
+        voiceStatus = Ui.text(ctx, cz.stihnuto.panel.VoiceWake.status, u * 3.8f, Ui.ACCENT)
+        vCol.addView(voiceStatus)
+        vRow.addView(vCol, LinearLayout.LayoutParams(0, -2, 1f))
+        vRow.addView(Ui.button(ctx, if (vw) "Vypnout" else "Zapnout", u * 4.5f,
+            if (vw) Ui.CARD_HI else Ui.ACCENT, if (vw) Ui.TEXT else Ui.BG) {
+            app.settings.voiceWake = !vw
+            if (!vw) cz.stihnuto.panel.VoiceWake.start(app) else cz.stihnuto.panel.VoiceWake.stop()
+            render()
+        })
+        list.addView(vRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
+
         val ovl = cz.stihnuto.panel.Overlay.allowed(ctx)
         val ovlRow = LinearLayout(ctx).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -217,6 +238,7 @@ class AppsPage(ctx: Context) : Page(ctx) {
     }
 
     private var storageMsg: TextView? = null
+    private var voiceStatus: TextView? = null
     private var storageNote = ""
 
     private fun note(t: String) {
@@ -253,6 +275,7 @@ class AppsPage(ctx: Context) : Page(ctx) {
     private var lastStatuses = ""
 
     private fun refreshStatuses() {
+        voiceStatus?.text = cz.stihnuto.panel.VoiceWake.status
         val all = Updater.catalog.joinToString("|") { Updater.status(it.key) }
         for (item in Updater.catalog) statusViews[item.key]?.let { v ->
             val s = Updater.status(item.key)

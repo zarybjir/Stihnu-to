@@ -31,6 +31,12 @@ class Settings(ctx: Context) {
     var radarUrl: String by str("radar_url", "")
     var radarZoom: Int by int("radar_zoom", 7)
 
+    /** Hlasová aktivace (offline poslouchání na frázi). */
+    var voiceWake: Boolean
+        get() = p.getBoolean("voice_wake", false)
+        set(v) { p.edit().putBoolean("voice_wake", v).apply() }
+    var wakePhrase: String by str("wake_phrase", "prosím Pepo")
+
     var nightFrom: Int by int("night_from", 22)
     var nightTo: Int by int("night_to", 7)
     /** Jas v noci 1–100 %, 0 = neměnit. */

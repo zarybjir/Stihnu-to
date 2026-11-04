@@ -68,7 +68,20 @@ class ClaudePage(ctx: Context) : Page(ctx) {
         }
         right.addView(chips)
         root.addView(right, LinearLayout.LayoutParams(0, -1, 1f).apply { leftMargin = (u * 6).toInt() })
-        idle()
+        tts = TextToSpeech(ctx) { st ->
+            ttsReady = st == TextToSpeech.SUCCESS &&
+                tts?.setLanguage(Locale("cs", "CZ"))?.let { it >= TextToSpeech.LANG_AVAILABLE } == true
+        }
+        cz.stihnuto.panel.VoiceWake.onWake = {
+            app.main.post {
+                app.showPage("claude")
+                you.text = ""
+                answer.text = ""
+                status.text = "Poslouchám…"
+                mic.active = true
+            }
+        }
+        cz.stihnuto.panel.VoiceWake.onCommand = { cmd -> app.main.post { app.showPage("claude"); ask(cmd) } }
     }
 
     private fun idle() {
@@ -83,6 +96,7 @@ class ClaudePage(ctx: Context) : Page(ctx) {
             return
         }
         tts?.stop()
+        cz.stihnuto.panel.VoiceWake.pause(true)
         val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(ctx).also { recognizer = it }
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) { status.text = "Poslouchám…"; mic.active = true }
@@ -91,6 +105,7 @@ class ClaudePage(ctx: Context) : Page(ctx) {
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() { mic.active = false; status.text = "Přemýšlím…" }
             override fun onError(error: Int) {
+                cz.stihnuto.panel.VoiceWake.pause(false)
                 mic.active = false
                 status.text = when (error) {
                     SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Nerozuměl jsem, zkus to znovu"
@@ -100,6 +115,7 @@ class ClaudePage(ctx: Context) : Page(ctx) {
                 }
             }
             override fun onResults(results: Bundle?) {
+                cz.stihnuto.panel.VoiceWake.pause(false)
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                 if (text.isNullOrBlank()) idle() else ask(text)
             }
@@ -131,7 +147,16 @@ class ClaudePage(ctx: Context) : Page(ctx) {
     }
 
     private fun speak(text: String) {
-        if (ttsReady) tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "odpoved")
+        val t = tts ?: return
+        if (!ttsReady) return
+        cz.stihnuto.panel.VoiceWake.pause(true) // ať hodiny neposlouchají samy sebe
+        t.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+            override fun onStart(id: String?) {}
+            override fun onDone(id: String?) { app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.pause(false) }, 400) }
+            @Deprecated("Deprecated in Java")
+            override fun onError(id: String?) { cz.stihnuto.panel.VoiceWake.pause(false) }
+        })
+        t.speak(text, TextToSpeech.QUEUE_FLUSH, null, "odpoved")
     }
 
     override fun onShow() {
@@ -146,7 +171,7 @@ class ClaudePage(ctx: Context) : Page(ctx) {
 
     override fun onHide() {
         recognizer?.destroy(); recognizer = null
-        tts?.shutdown(); tts = null; ttsReady = false
+        // TTS zůstává — odpověď na hlasový povel se má přečíst i po přepnutí okna
     }
 
     companion object {

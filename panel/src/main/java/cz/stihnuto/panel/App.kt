@@ -49,6 +49,7 @@ class App : Application() {
         calendar = CalendarRepo(this)
         radar = RadarRepo(this)
         Overlay.startWatchdog(this)
+        main.postDelayed({ VoiceWake.start(this) }, 15_000)
         server = WebServer(this, 8080).also { it.start() }
     }
 
