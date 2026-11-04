@@ -39,6 +39,15 @@ class Assistant(private val app: App) {
     /** Zeptá se Clauda. Běží v pozadí, výsledek vrátí do [done] (v pozadí). */
     fun ask(text: String, done: (String) -> Unit) {
         app.io.execute {
+            if (app.settings.aiProvider == "gemini") {
+                done(try {
+                    askGemini(text)
+                } catch (e: Exception) {
+                    Log.w("Panel", "gemini", e)
+                    e.message ?: "Nepovedlo se spojit s Gemini."
+                })
+                return@execute
+            }
             done(try {
                 askBlocking(text)
             } catch (e: UnauthorizedException) {
@@ -109,6 +118,86 @@ class Assistant(private val app: App) {
             history += MessageParam.ofUserOfContentBlockParams(results)
         }
         return "Hotovo."
+    }
+
+    // ------------------------------------------------------------------
+    // Gemini (Google) — bezplatná varianta, stejné nástroje
+    // ------------------------------------------------------------------
+
+    private val gHistory = mutableListOf<JSONObject>()
+    private var gLastUse = 0L
+
+    @Synchronized
+    private fun askGemini(text: String): String {
+        val key = app.settings.geminiKey.trim()
+        if (key.isEmpty()) return "Nejdřív vlož klíč ke Gemini v nastavení na počítači."
+        val model = app.settings.geminiModel.trim().ifEmpty { "gemini-flash-lite-latest" }
+        if (System.currentTimeMillis() - gLastUse > 5 * 60_000L) gHistory.clear()
+        gLastUse = System.currentTimeMillis()
+        gHistory += JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", text)))
+
+        repeat(6) {
+            val body = JSONObject()
+                .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemPrompt()))))
+                .put("contents", JSONArray(gHistory))
+                .put("tools", JSONArray().put(JSONObject().put("functionDeclarations", GEMINI_TOOLS)))
+            val resp = geminiPost(model, key, body)
+            val cand = resp.optJSONArray("candidates")?.optJSONObject(0)
+            val content = cand?.optJSONObject("content")
+            if (content == null) {
+                gHistory.clear()
+                return if (resp.optJSONObject("promptFeedback") != null) "Tohle bohužel udělat nemůžu." else "Gemini neodpověděl."
+            }
+            if (!content.has("role")) content.put("role", "model")
+            gHistory += content // vrací se beze změny (včetně thoughtSignature)
+            val parts = content.optJSONArray("parts") ?: JSONArray()
+            val calls = (0 until parts.length()).mapNotNull { parts.optJSONObject(it)?.optJSONObject("functionCall") }
+            if (calls.isEmpty()) {
+                return (0 until parts.length()).mapNotNull { i ->
+                    parts.optJSONObject(i)?.takeIf { !it.optBoolean("thought") }?.optString("text")?.takeIf { it.isNotBlank() }
+                }.joinToString(" ").trim().ifEmpty { "Hotovo." }
+            }
+            val results = JSONArray()
+            for (c in calls) {
+                val name = c.optString("name")
+                val args = c.optJSONObject("args") ?: JSONObject()
+                @Suppress("UNCHECKED_CAST")
+                val input = args.keys().asSequence().associateWith { k -> args.opt(k).let { v -> if (v == JSONObject.NULL) null else v } }
+                val out = try { runTool(name, input) } catch (e: Exception) { "Chyba: ${e.message}" }
+                results.put(JSONObject().put("functionResponse",
+                    JSONObject().put("name", name).put("response", JSONObject().put("result", out))))
+            }
+            gHistory += JSONObject().put("role", "user").put("parts", results)
+        }
+        return "Hotovo."
+    }
+
+    private fun geminiPost(model: String, key: String, body: JSONObject): JSONObject {
+        val c = java.net.URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
+            .openConnection() as java.net.HttpURLConnection
+        c.requestMethod = "POST"
+        c.doOutput = true
+        c.connectTimeout = 15000
+        c.readTimeout = 60000
+        c.setRequestProperty("Content-Type", "application/json")
+        c.setRequestProperty("x-goog-api-key", key)
+        try {
+            c.outputStream.use { it.write(body.toString().toByteArray()) }
+            val code = c.responseCode
+            val text = (if (code in 200..299) c.inputStream else c.errorStream)?.use { String(it.readBytes(), Charsets.UTF_8) } ?: ""
+            if (code !in 200..299) {
+                gHistory.clear()
+                val msg = try { JSONObject(text).optJSONObject("error")?.optString("message") } catch (e: Exception) { null }
+                throw java.io.IOException(when (code) {
+                    400, 401, 403 -> "Gemini odmítl dotaz ($code). Zkontroluj klíč a název modelu. ${msg ?: ""}".trim()
+                    429 -> "Vyčerpaný bezplatný limit Gemini, zkus to později."
+                    else -> "Gemini vrátil chybu $code. ${msg ?: ""}".trim()
+                })
+            }
+            return JSONObject(text)
+        } finally {
+            c.disconnect()
+        }
     }
 
     private fun systemPrompt(): String {
@@ -238,10 +327,33 @@ class Assistant(private val app: App) {
                 .putAdditionalProperty("additionalProperties", JsonValue.from(false))
                 .build()
 
+        class Def(val name: String, val desc: String, val props: Map<String, Map<String, Any>>, val required: List<String>)
+
         private fun tool(name: String, desc: String, props: Map<String, Map<String, Any>>, required: List<String> = emptyList()) =
-            Tool.builder().name(name).description(desc).inputSchema(schema(props, required)).build()
+            Def(name, desc, props, required)
 
         val TOOLS: List<Tool> by lazy {
+            DEFS.map { Tool.builder().name(it.name).description(it.desc).inputSchema(schema(it.props, it.required)).build() }
+        }
+
+        /** Stejné nástroje ve formátu Gemini (functionDeclarations). */
+        val GEMINI_TOOLS: JSONArray by lazy {
+            fun conv(v: Any?): Any? = when (v) {
+                is Map<*, *> -> JSONObject().apply {
+                    v.forEach { (k, x) -> put(k.toString(), if (k == "type") x.toString().uppercase() else conv(x)) }
+                }
+                is List<*> -> JSONArray(v.map { conv(it) })
+                else -> v
+            }
+            JSONArray(DEFS.map { d ->
+                JSONObject().put("name", d.name).put("description", d.desc).apply {
+                    if (d.props.isNotEmpty()) put("parameters", JSONObject().put("type", "OBJECT")
+                        .put("properties", conv(d.props)).put("required", JSONArray(d.required)))
+                }
+            })
+        }
+
+        val DEFS: List<Def> by lazy {
             listOf(
                 tool("get_status", "Aktuální stav: čas, počasí (teď, po hodinách, 7 dní), kalendář na 2 týdny, hlavice a teploměry, co hraje.", emptyMap()),
                 tool(

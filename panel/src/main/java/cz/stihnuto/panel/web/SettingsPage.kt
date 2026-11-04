@@ -66,6 +66,16 @@ ${field("tapo_user", "E-mail k účtu Tapo", s.tapoUser)}
 ${secret("tapo_pass", "Heslo k účtu Tapo", s.tapoPass.isNotEmpty(), "V aplikaci Tapo zapni: Já → Tapo Lab → Kompatibilita s třetími stranami.")}
 ${field("heat_step", "Krok tlačítek −/+ (°C)", s.heatStep.toString())}
 
+<h2>Asistent</h2>
+<label>Kdo odpovídá<select name="ai_provider" style="display:block;width:100%;padding:10px;margin-top:4px;border-radius:8px;border:1px solid #3a4652;background:#17202a;color:#f2f5f8;font-size:16px">
+<option value="claude"${if (s.aiProvider == "claude") " selected" else ""}>Claude (placený, Anthropic)</option>
+<option value="gemini"${if (s.aiProvider == "gemini") " selected" else ""}>Gemini (zdarma s limitem, Google)</option>
+</select></label>
+
+<h2>Gemini</h2>
+${secret("gemini_key", "Klíč ke Gemini API", s.geminiKey.isNotEmpty(), "Zdarma na <a style=\"color:#4fa3ff\" href=\"https://aistudio.google.com/apikey\">aistudio.google.com/apikey</a> → Create API key. Na bezplatné verzi může Google dotazy použít ke zlepšování modelů.")}
+${field("gemini_model", "Model", s.geminiModel, "Výchozí <code>gemini-flash-lite-latest</code> (nejvyšší denní limit zdarma), chytřejší <code>gemini-flash-latest</code>.")}
+
 <h2>Claude</h2>
 ${secret("anthropic_key", "Klíč k Claude API", s.anthropicKey.isNotEmpty(), "Získáš na platform.claude.com → API Keys. Platí se podle použití.")}
 ${field("claude_model", "Model", s.claudeModel, "Výchozí <code>claude-opus-5-5</code>. Levnější a rychlejší: <code>claude-haiku-5-5</code>.")}
@@ -141,6 +151,9 @@ fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body
         f["tapo_user"]?.let { s.tapoUser = it.trim() }
         f["tapo_pass"]?.takeIf { it.isNotEmpty() }?.let { s.tapoPass = it }
         f["heat_step"]?.replace(',', '.')?.toDoubleOrNull()?.let { s.heatStep = it.coerceIn(0.5, 5.0) }
+        f["ai_provider"]?.takeIf { it == "claude" || it == "gemini" }?.let { s.aiProvider = it }
+        f["gemini_key"]?.takeIf { it.isNotBlank() }?.let { s.geminiKey = it.trim() }
+        f["gemini_model"]?.trim()?.takeIf { it.isNotEmpty() }?.let { s.geminiModel = it }
         f["anthropic_key"]?.takeIf { it.isNotBlank() }?.let { s.anthropicKey = it.trim() }
         f["claude_model"]?.trim()?.takeIf { it.isNotEmpty() }?.let { s.claudeModel = it }
         f["night_from"]?.toIntOrNull()?.let { s.nightFrom = it.coerceIn(0, 23) }

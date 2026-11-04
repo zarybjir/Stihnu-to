@@ -24,6 +24,10 @@ class Settings(ctx: Context) {
     var hubIp: String by str("hub_ip", "")
     var heatStep: Double by dbl("heat_step", 0.5)
 
+    /** claude | gemini */
+    var aiProvider: String by str("ai_provider", "claude")
+    var geminiKey: String by str("gemini_key", "")
+    var geminiModel: String by str("gemini_model", "gemini-flash-lite-latest")
     var anthropicKey: String by str("anthropic_key", "")
     var claudeModel: String by str("claude_model", "claude-opus-5-5")
 
