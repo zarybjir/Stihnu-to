@@ -40,6 +40,10 @@ object Updater {
                 "newpipe", "NewPipe", "Videa z YouTube bez reklam (open source).",
                 "org.schabi.newpipe",
             ) { githubApk("TeamNewPipe/NewPipe") },
+            Installable(
+                "heliboard", "Klávesnice HeliBoard", "Klávesnice na displeji — pro přihlášení a hledání (open source).",
+                "helium314.keyboard",
+            ) { githubApk("Helium314/HeliBoard", prefer = listOf("release"), avoid = listOf("debug", "nouserlib")) },
         )
     }
 
@@ -109,7 +113,7 @@ object Updater {
     }
 
     /** Najde v posledním vydání na GitHubu APK pro procesor hodin. */
-    private fun githubApk(repo: String, prefer: List<String> = emptyList()): String {
+    private fun githubApk(repo: String, prefer: List<String> = emptyList(), avoid: List<String> = emptyList()): String {
         val rel = JSONObject(Http.text("https://api.github.com/repos/$repo/releases/latest"))
         val assets = rel.getJSONArray("assets")
         val names = (0 until assets.length()).map { assets.getJSONObject(it) }
@@ -124,6 +128,7 @@ object Updater {
             abis.forEachIndexed { i, abi -> if (s.contains(abi)) p += 10 - i }
             if (s.contains("universal")) p += 3
             prefer.forEach { if (s.contains(it)) p += 2 }
+            avoid.forEach { if (s.contains(it)) p -= 2 }
             return p
         }
         val best = names.maxByOrNull { score(it.getString("name")) }!!

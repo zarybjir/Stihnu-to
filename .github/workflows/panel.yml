@@ -11,6 +11,10 @@ on:
       - "build.gradle.kts"
   workflow_dispatch:
 
+concurrency:
+  group: panel-build
+  cancel-in-progress: true
+
 permissions:
   contents: write
 

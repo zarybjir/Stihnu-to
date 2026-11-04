@@ -15,6 +15,7 @@
         <package android:name="com.google.android.youtube" />
         <package android:name="com.maxrave.simpmusic" />
         <package android:name="org.schabi.newpipe" />
+        <package android:name="helium314.keyboard" />
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>

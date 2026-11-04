@@ -64,6 +64,32 @@ class AppsPage(ctx: Context) : Page(ctx) {
             }
             list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
         }
+        if (Updater.installedVersion(ctx, "helium314.keyboard") != null) {
+            val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            val enabled = imm.enabledInputMethodList.any { it.packageName == "helium314.keyboard" }
+            val kRow = LinearLayout(ctx).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                background = Ui.rounded(Ui.CARD, u * 3)
+                setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+            }
+            val kCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            kCol.addView(Ui.text(ctx, "Klávesnice", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+            kCol.addView(Ui.text(ctx, if (enabled) "Zapnutá. Tlačítkem „Vybrat“ ji nastav jako hlavní."
+                else "1) Zapnout: v seznamu zapni HeliBoard a vrať se. 2) Vybrat: zvol HeliBoard.", u * 4f, Ui.DIM))
+            kRow.addView(kCol, LinearLayout.LayoutParams(0, -2, 1f))
+            kRow.addView(Ui.button(ctx, "Zapnout", u * 4.5f, if (enabled) Ui.CARD_HI else Ui.ACCENT, if (enabled) Ui.TEXT else Ui.BG) {
+                try {
+                    ctx.startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (e: Exception) {
+                    statusViews["heliboard"]?.text = "Nastavení klávesnic se nedá otevřít."
+                }
+            })
+            kRow.addView(Ui.button(ctx, "Vybrat", u * 4.5f, if (enabled) Ui.ACCENT else Ui.CARD_HI, if (enabled) Ui.BG else Ui.TEXT) {
+                imm.showInputMethodPicker()
+            }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 2).toInt() })
+            list.addView(kRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
+        }
+
         val ovl = cz.stihnuto.panel.Overlay.allowed(ctx)
         val ovlRow = LinearLayout(ctx).apply {
             gravity = Gravity.CENTER_VERTICAL
