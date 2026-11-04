@@ -208,6 +208,10 @@ class Assistant(private val app: App) {
                 .put("topi", c.heating).put("vlhkost", c.humidity).put("online", c.online)
         }))
         app.heating.error?.let { j.put("topeni_chyba", it) }
+        j.put("kalendar", JSONArray(app.calendar.upcoming().take(20).map { e ->
+            JSONObject().put("nazev", e.title).put("zacatek", e.start.toString()).put("konec", e.end.toString())
+                .put("cely_den", e.allDay).put("misto", e.location)
+        }))
         val m = app.media
         j.put("hudba", JSONObject().put("hraje", m.isPlaying).put("skladba", m.title)
             .put("interpret", m.artist).put("aplikace", m.appName).put("hlasitost", m.volumePercent))
@@ -229,11 +233,11 @@ class Assistant(private val app: App) {
 
         val TOOLS: List<Tool> by lazy {
             listOf(
-                tool("get_status", "Aktuální stav: čas, počasí (teď, po hodinách, 7 dní), hlavice a teploměry, co hraje.", emptyMap()),
+                tool("get_status", "Aktuální stav: čas, počasí (teď, po hodinách, 7 dní), kalendář na 2 týdny, hlavice a teploměry, co hraje.", emptyMap()),
                 tool(
                     "show_page", "Přepne panel na jiné okno.",
                     mapOf("page" to mapOf("type" to "string", "enum" to Pages.all.keys.toList(),
-                        "description" to "clock=hodiny, weather=počasí na dny, hourly=po hodinách, radar, music=hudba, heating=topení, claude=asistent")),
+                        "description" to "clock=hodiny, calendar=kalendář, weather=počasí na dny, hourly=po hodinách, radar, music=hudba, heating=topení, claude=asistent")),
                     listOf("page"),
                 ),
                 tool(

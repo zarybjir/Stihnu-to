@@ -31,6 +31,7 @@ class App : Application() {
     lateinit var weather: WeatherRepo
     lateinit var heating: HeatingRepo
     lateinit var media: MediaRepo
+    lateinit var calendar: CalendarRepo
     private var server: WebServer? = null
 
     /** Nastaví MainActivity — přepne okno. */
@@ -44,6 +45,7 @@ class App : Application() {
         weather = WeatherRepo(this)
         heating = HeatingRepo(this)
         media = MediaRepo(this)
+        calendar = CalendarRepo(this)
         server = WebServer(this, 8080).also { it.start() }
     }
 
@@ -56,6 +58,7 @@ class App : Application() {
     fun onSettingsChanged() {
         heating.reset()
         weather.refresh(force = true)
+        calendar.refresh(force = true)
         main.post { navigator?.invoke("__reload__") }
     }
 
@@ -108,6 +111,63 @@ class WeatherRepo(app: App) : Repo(app) {
                 notifyChanged()
             }
         }
+    }
+}
+
+class CalendarRepo(app: App) : Repo(app) {
+    @Volatile var events: List<cz.stihnuto.panel.calendar.CalEvent> = emptyList(); private set
+    @Volatile var error: String? = null; private set
+    @Volatile var loaded = false; private set
+    private var fetchedAt = 0L
+    private var loading = false
+
+    val urls get() = app.settings.calendarUrls.split('\n', ' ', ',').map { it.trim() }
+        .filter { it.startsWith("http") || it.startsWith("webcal") }
+
+    init {
+        refresh(force = true)
+        tick()
+    }
+
+    private fun tick() {
+        app.main.postDelayed({ refresh(); tick() }, 5 * 60_000L)
+    }
+
+    fun refresh(force: Boolean = false) {
+        if (loading || (!force && System.currentTimeMillis() - fetchedAt < 15 * 60_000L)) return
+        val list = urls
+        if (list.isEmpty()) {
+            events = emptyList(); error = null; loaded = true; notifyChanged(); return
+        }
+        loading = true
+        app.io.execute {
+            val now = java.time.LocalDateTime.now()
+            val from = now.toLocalDate().atStartOfDay()
+            val to = from.plusDays(15)
+            val all = mutableListOf<cz.stihnuto.panel.calendar.CalEvent>()
+            val errors = mutableListOf<String>()
+            for (u in list) {
+                try {
+                    val text = Http.text(u.replaceFirst("webcal://", "https://"))
+                    all += cz.stihnuto.panel.calendar.Ics.parse(text, from, to)
+                } catch (e: Exception) {
+                    Log.w("Panel", "kalendář", e)
+                    errors += e.message ?: e.javaClass.simpleName
+                }
+            }
+            events = all.sortedWith(compareBy({ it.start.toLocalDate() }, { !it.allDay }, { it.start }))
+            error = if (errors.isEmpty()) null else "Kalendář nejde načíst (${errors.first()})"
+            fetchedAt = System.currentTimeMillis()
+            loaded = true
+            loading = false
+            notifyChanged()
+        }
+    }
+
+    /** Události, které ještě neskončily. */
+    fun upcoming(): List<cz.stihnuto.panel.calendar.CalEvent> {
+        val now = java.time.LocalDateTime.now()
+        return events.filter { it.end.isAfter(now) || (it.allDay && !it.start.toLocalDate().isBefore(now.toLocalDate())) }
     }
 }
 

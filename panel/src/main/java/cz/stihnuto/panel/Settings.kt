@@ -11,7 +11,10 @@ class Settings(ctx: Context) {
     var lon: Double by dbl("lon", 14.4378)
 
     /** Pořadí oken, oddělené čárkou. Okno, které tu není, se nezobrazí. */
-    var pages: String by str("pages", "clock,weather,hourly,radar,music,heating,claude")
+    var pages: String by str("pages", "clock,calendar,weather,hourly,radar,music,heating,claude")
+
+    /** Odkazy na kalendáře ve formátu iCal (.ics), každý na nový řádek. */
+    var calendarUrls: String by str("calendar_urls", "")
     var homePage: String by str("home_page", "clock")
     /** Po kolika minutách bez dotyku se vrátit na domovské okno (0 = nikdy). */
     var idleMinutes: Int by int("idle_minutes", 3)
@@ -34,6 +37,16 @@ class Settings(ctx: Context) {
     var nightBrightness: Int by int("night_brightness", 8)
 
     /** Okno Aplikace je vždy poslední — přes něj jdou aktualizace. */
+    init {
+        if (p.getInt("pages_version", 1) < 2) {
+            val saved = p.getString("pages", null)
+            if (saved != null && "calendar" !in saved) {
+                p.edit().putString("pages", saved.replaceFirst("clock", "clock,calendar")).apply()
+            }
+            p.edit().putInt("pages_version", 2).apply()
+        }
+    }
+
     fun pageList(): List<String> =
         pages.split(',').map { it.trim() }.filter { it.isNotEmpty() && it != "apps" } + "apps"
 

@@ -41,6 +41,11 @@ pre{background:#17202a;padding:10px;border-radius:8px;white-space:pre-wrap}
 ${field("place", "Název", s.place)}
 <div class="row">${field("lat", "Šířka", s.lat.toString())}${field("lon", "Délka", s.lon.toString())}</div>
 
+<h2>Kalendář</h2>
+<label>Odkazy na kalendáře (každý na nový řádek)<textarea name="calendar_urls" rows="3">${esc(s.calendarUrls)}</textarea></label>
+<small>Google Kalendář na počítači → ⚙ Nastavení → vlevo vyber kalendář → „Tajná adresa ve formátu iCal“ → zkopírovat.
+Funguje i iCloud, Outlook nebo Seznam (cokoli s odkazem .ics).</small>
+
 <h2>Okna</h2>
 ${field("pages", "Pořadí oken (oddělit čárkou)", s.pages, pageHelp)}
 <div class="row">${field("home_page", "Domovské okno", s.homePage)}${field("idle_minutes", "Návrat na domovské po (min, 0 = nikdy)", s.idleMinutes.toString(), type = "number")}</div>
@@ -105,6 +110,7 @@ fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body
         f["home_page"]?.trim()?.takeIf { it in Pages.all }?.let { s.homePage = it }
         f["idle_minutes"]?.toIntOrNull()?.let { s.idleMinutes = it.coerceIn(0, 600) }
         f["radar_url"]?.let { s.radarUrl = it.trim() }
+        f["calendar_urls"]?.let { s.calendarUrls = it.trim() }
         f["hub_ip"]?.let { s.hubIp = it.trim() }
         f["tapo_user"]?.let { s.tapoUser = it.trim() }
         f["tapo_pass"]?.takeIf { it.isNotEmpty() }?.let { s.tapoPass = it }

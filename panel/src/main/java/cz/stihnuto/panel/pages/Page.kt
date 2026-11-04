@@ -26,6 +26,7 @@ object Pages {
 
     val all: Map<String, Info> = linkedMapOf(
         "clock" to Info("Hodiny") { ClockPage(it) },
+        "calendar" to Info("Kalendář") { CalendarPage(it) },
         "weather" to Info("Počasí") { WeatherPage(it) },
         "hourly" to Info("Po hodinách") { HourlyPage(it) },
         "radar" to Info("Radar") { RadarPage(it) },

@@ -13,21 +13,26 @@ import java.util.Locale
 
 /** Barvy, písmo a pomocné funkce pro vzhled. Tmavý motiv — v noci nesvítí. */
 object Ui {
-    const val BG = 0xFF0B0F14.toInt()
-    const val CARD = 0xFF17202A.toInt()
-    const val CARD_HI = 0xFF223040.toInt()
-    const val TEXT = 0xFFF2F5F8.toInt()
-    const val DIM = 0xFF8A96A3.toInt()
-    const val FAINT = 0xFF3A4652.toInt()
-    const val ACCENT = 0xFFFFC94A.toInt()
-    const val BLUE = 0xFF4FA3FF.toInt()
-    const val HEAT = 0xFFFF7A45.toInt()
-    const val GOOD = 0xFF5CD68A.toInt()
+    // Barvy ve stylu Google Pixel (Material You, tmavý motiv)
+    const val BG = 0xFF131314.toInt()
+    const val CARD = 0xFF1E1F20.toInt()
+    const val CARD_HI = 0xFF2D2F31.toInt()
+    const val TEXT = 0xFFE3E3E3.toInt()
+    const val DIM = 0xFF9AA0A6.toInt()
+    const val FAINT = 0xFF3C4043.toInt()
+    const val PRIMARY = 0xFFA8C7FA.toInt()
+    const val PRIMARY_DARK = 0xFF0842A0.toInt()
+    const val ACCENT = 0xFFFDD663.toInt()
+    const val BLUE = 0xFF8AB4F8.toInt()
+    const val HEAT = 0xFFF28B82.toInt()
+    const val GOOD = 0xFF81C995.toInt()
 
     val LIGHT: Typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
     val REGULAR: Typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     val MEDIUM: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     val BOLD: Typeface = Typeface.create("sans-serif", Typeface.BOLD)
+    /** Nejtlustší řez (Roboto Black) — na velké hodiny. */
+    val BLACK: Typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
 
     private val DAYS = arrayOf("pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle")
     private val DAYS_SHORT = arrayOf("Po", "Út", "St", "Čt", "Pá", "So", "Ne")
