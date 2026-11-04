@@ -64,6 +64,14 @@ class RadarPage(ctx: Context) : Page(ctx) {
         r.start()
     }
 
+    private companion object {
+        // Oblast kompozitu ČHMÚ (EPSG:3857)
+        const val CZ_W = 11.267
+        const val CZ_E = 19.624
+        const val CZ_S = 48.047
+        const val CZ_N = 51.458
+    }
+
     private class RadarView(ctx: Context, val lat: Double, val lon: Double, val zoom: Int) : View(ctx) {
         private val app = App.instance
         private var base: Bitmap? = null
@@ -103,7 +111,7 @@ class RadarPage(ctx: Context) : Page(ctx) {
         }
 
         /** Pixelové souřadnice v Mercatorově projekci na dané úrovni přiblížení. */
-        private fun worldPx(): Pair<Double, Double> {
+        private fun worldPx(lon: Double = this.lon, lat: Double = this.lat): Pair<Double, Double> {
             val n = 256.0 * (1 shl zoom)
             val x = (lon + 180) / 360 * n
             val r = Math.toRadians(lat)
@@ -117,19 +125,10 @@ class RadarPage(ctx: Context) : Page(ctx) {
             if (w == 0 || h == 0 || !running) return
             app.io.execute {
                 try {
-                    val meta = JSONObject(Http.text("https://api.rainviewer.com/public/weather-maps.json"))
-                    val host = meta.getString("host")
-                    val past = meta.getJSONObject("radar").getJSONArray("past")
-                    val list = (0 until past.length()).map { past.getJSONObject(it) }.takeLast(7)
                     val newBase = base ?: compose(w, h, Bitmap.Config.RGB_565, Ui.BG) { z, x, y ->
                         "https://basemaps.cartocdn.com/dark_all/$z/$x/$y.png"
                     }
-                    val newFrames = list.map { f ->
-                        val path = f.getString("path")
-                        f.getLong("time") to compose(w, h, Bitmap.Config.ARGB_8888, 0) { z, x, y ->
-                            "$host$path/256/$z/$x/$y/2/1_1.png"
-                        }
-                    }
+                    val newFrames = if (inCzechia()) chmiFrames(w, h) else rainViewerFrames(w, h)
                     app.main.post {
                         if (!running) {
                             newFrames.forEach { it.second.recycle() }
@@ -149,6 +148,69 @@ class RadarPage(ctx: Context) : Page(ctx) {
                     app.main.post { status = "Radar nejde načíst (${e.message})"; invalidate() }
                 }
                 app.main.postDelayed(reload, 10 * 60_000L)
+            }
+        }
+
+        private fun inCzechia() = lon in CZ_W..CZ_E && lat in CZ_S..CZ_N
+
+        /** Radar ČHMÚ (otevřená data, bez klíče): poslední hodina po 10 minutách. */
+        private fun chmiFrames(w: Int, h: Int): List<Pair<Long, Bitmap>> {
+            val dir = "https://opendata.chmi.cz/meteorology/weather/radar/composite/maxz/png/"
+            val names = Regex("""pacz2gmaps3\.z_max3d\.(\d{8})\.(\d{4})\.0\.png""")
+                .findAll(Http.text(dir)).map { it.value }.distinct().sorted().toList()
+            val pick = names.takeLast(13).filterIndexed { i, _ -> i % 2 == 0 }.takeLast(7)
+            val fmt = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd.HHmm")
+            return pick.mapNotNull { name ->
+                val src = Http.bitmap(dir + name) ?: return@mapNotNull null
+                val stamp = name.substringAfter("z_max3d.").substringBefore(".0.png")
+                val time = java.time.LocalDateTime.parse(stamp, fmt).toEpochSecond(java.time.ZoneOffset.UTC)
+                time to placeChmi(src, w, h)
+            }
+        }
+
+        /** Vyřízne z obrázku ČHMÚ mapovou část a umístí ji do okna podle souřadnic. */
+        private fun placeChmi(src: Bitmap, w: Int, h: Int): Bitmap {
+            // Mapová oblast je vlevo dole (598×378 px), zbytek jsou řezy a popisky.
+            val dataW = 598; val dataH = 378
+            val top = (src.height - dataH).coerceAtLeast(0)
+            val crop = Bitmap.createBitmap(src, 0, top, minOf(dataW, src.width), minOf(dataH, src.height))
+            src.recycle()
+            // Pozadí (černá/bílá/šedá bez barvy) zprůhlednit, ať je vidět mapa.
+            val px = IntArray(crop.width * crop.height)
+            crop.getPixels(px, 0, crop.width, 0, 0, crop.width, crop.height)
+            for (i in px.indices) {
+                val c = px[i]
+                val r = (c shr 16) and 0xFF; val g = (c shr 8) and 0xFF; val b = c and 0xFF
+                if ((c ushr 24) < 40 || (maxOf(r, g, b) - minOf(r, g, b) < 12)) px[i] = 0
+            }
+            val clean = Bitmap.createBitmap(px, crop.width, crop.height, Bitmap.Config.ARGB_8888)
+            crop.recycle()
+
+            val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val scale = (h / 480f).coerceAtLeast(1f)
+            val (cx, cy) = worldPx()
+            val left = cx - w / 2 / scale
+            val topPx = cy - h / 2 / scale
+            val (x0, y0) = worldPx(CZ_W, CZ_N)
+            val (x1, y1) = worldPx(CZ_E, CZ_S)
+            val dst = android.graphics.RectF(
+                ((x0 - left) * scale).toFloat(), ((y0 - topPx) * scale).toFloat(),
+                ((x1 - left) * scale).toFloat(), ((y1 - topPx) * scale).toFloat(),
+            )
+            Canvas(out).drawBitmap(clean, null, dst, paint)
+            clean.recycle()
+            return out
+        }
+
+        private fun rainViewerFrames(w: Int, h: Int): List<Pair<Long, Bitmap>> {
+            val meta = JSONObject(Http.text("https://api.rainviewer.com/public/weather-maps.json"))
+            val host = meta.getString("host")
+            val past = meta.getJSONObject("radar").getJSONArray("past")
+            return (0 until past.length()).map { past.getJSONObject(it) }.takeLast(7).map { f ->
+                val path = f.getString("path")
+                f.getLong("time") to compose(w, h, Bitmap.Config.ARGB_8888, 0) { z, x, y ->
+                    "$host$path/256/$z/$x/$y/2/1_1.png"
+                }
             }
         }
 
@@ -208,7 +270,7 @@ class RadarPage(ctx: Context) : Page(ctx) {
 
             small.textSize = h * 0.03f
             small.textAlign = Paint.Align.RIGHT
-            c.drawText("RainViewer · © OpenStreetMap · © CARTO", width - h * 0.03f, h * 0.05f, small)
+            c.drawText(if (inCzechia()) "Radar ČHMÚ · © OpenStreetMap · © CARTO" else "RainViewer · © OpenStreetMap · © CARTO", width - h * 0.03f, h * 0.05f, small)
             status?.let {
                 text.textSize = h * 0.055f
                 c.drawText(it, h * 0.04f, h * 0.5f, text)
