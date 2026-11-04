@@ -10,7 +10,9 @@ object SettingsPage {
     fun render(app: App): String {
         val s = app.settings
         val ip = WebServer.localIp() ?: "<ip-hodin>"
-        val pageHelp = Pages.all.entries.joinToString(" · ") { "<code>${it.key}</code> ${it.value.title}" }
+        val allJson = Pages.all.entries.joinToString(",", "{", "}") {
+            org.json.JSONObject.quote(it.key) + ":" + org.json.JSONObject.quote(it.value.title)
+        }
         fun field(name: String, label: String, value: String, hint: String = "", type: String = "text") =
             """<label>$label<input name="$name" type="$type" value="${esc(value)}"></label>""" +
                 (if (hint.isNotEmpty()) "<small>$hint</small>" else "")
@@ -29,6 +31,10 @@ small{color:#8a96a3;display:block;margin-top:3px}code{color:#ffc94a}
 button{background:#ffc94a;color:#0b0f14;border:0;border-radius:8px;padding:12px 20px;font-size:16px;font-weight:600;margin-top:16px;cursor:pointer}
 .row{display:flex;gap:12px}.row>*{flex:1}.ok{background:#1d3a28;padding:10px;border-radius:8px}
 #results button{display:block;background:#223040;color:#f2f5f8;margin:6px 0;font-weight:400}
+.win{display:flex;align-items:center;gap:6px;background:#1e1f20;border-radius:10px;padding:6px 10px;margin:6px 0}
+.win.off{opacity:.55}.chk{flex:1;display:flex;align-items:center;gap:8px;margin:0;color:#e3e3e3;font-size:16px}
+.chk input{width:auto;display:inline;margin:0}.sm{margin:0;padding:6px 12px;background:#2d2f31;color:#e3e3e3;font-weight:400}
+.sm:disabled{opacity:.3}.sm.home{background:#a8c7fa;color:#131314}
 pre{background:#17202a;padding:10px;border-radius:8px;white-space:pre-wrap}
 </style></head><body>
 <h1>Panel na hodinách</h1>
@@ -47,8 +53,11 @@ ${field("place", "Název", s.place)}
 Funguje i iCloud, Outlook nebo Seznam (cokoli s odkazem .ics).</small>
 
 <h2>Okna</h2>
-${field("pages", "Pořadí oken (oddělit čárkou)", s.pages, pageHelp)}
-<div class="row">${field("home_page", "Domovské okno", s.homePage)}${field("idle_minutes", "Návrat na domovské po (min, 0 = nikdy)", s.idleMinutes.toString(), type = "number")}</div>
+<small>Zaškrtnutá okna se zobrazují, šipkami změníš pořadí, ★ je domovské okno. Okno Aplikace je vždy poslední.</small>
+<div id="wins"></div>
+<input type="hidden" name="pages" id="pages" value="${esc(s.pages)}">
+<input type="hidden" name="home_page" id="home_page" value="${esc(s.homePage)}">
+${field("idle_minutes", "Návrat na domovské okno po (min, 0 = nikdy)", s.idleMinutes.toString(), type = "number")}
 ${field("radar_url", "Radar — vlastní webová adresa (nepovinné)", s.radarUrl, "Prázdné = vestavěný radar. Jinak třeba stránka ČHMÚ nebo Windy.")}
 
 <h2>Topení (Tapo)</h2>
@@ -81,6 +90,23 @@ ${field("claude_model", "Model", s.claudeModel, "Výchozí <code>claude-opus-5-5
 Popis je v README v repozitáři.</small>
 
 <script>
+var ALL=$allJson;
+var on=document.getElementById('pages').value.split(',').filter(function(x){return ALL[x]&&x!='apps'});
+var home=document.getElementById('home_page').value;
+function drawWins(){var off=Object.keys(ALL).filter(function(k){return k!='apps'&&on.indexOf(k)<0});
+var box=document.getElementById('wins');box.innerHTML='';
+on.concat(off).forEach(function(id){var en=on.indexOf(id)>=0,i=on.indexOf(id);
+var d=document.createElement('div');d.className='win'+(en?'':' off');
+d.innerHTML='<label class="chk"><input type="checkbox" '+(en?'checked':'')+'> '+ALL[id]+'</label>'+
+(en?'<button type="button" class="sm" '+(i==0?'disabled':'')+'>▲</button><button type="button" class="sm" '+(i==on.length-1?'disabled':'')+'>▼</button><button type="button" class="sm'+(home==id?' home':'')+'">★</button>':'');
+var b=d.querySelectorAll('button');
+d.querySelector('input').onchange=function(e){if(e.target.checked)on.push(id);else if(on.length>1)on.splice(i,1);if(on.indexOf(home)<0)home=on[0];sync()};
+if(en){b[0].onclick=function(){if(i>0){on.splice(i-1,0,on.splice(i,1)[0]);sync()}};
+b[1].onclick=function(){if(i<on.length-1){on.splice(i+1,0,on.splice(i,1)[0]);sync()}};
+b[2].onclick=function(){home=id;sync()};}
+box.appendChild(d);});}
+function sync(){document.getElementById('pages').value=on.join(',');document.getElementById('home_page').value=home;drawWins()}
+drawWins();
 if(location.search.indexOf('aktualizace')>=0)setInterval(function(){fetch('/api/update').then(r=>r.json()).then(function(j){document.getElementById('upd').textContent=j.status;});},1500);
 if(location.search.indexOf('ulozeno')>=0)document.getElementById('saved').innerHTML='<p class="ok">Uloženo.</p>';
 var t;document.getElementById('q').addEventListener('input',function(e){clearTimeout(t);var v=e.target.value;t=setTimeout(function(){

@@ -34,7 +34,9 @@ class AppsPage(ctx: Context) : Page(ctx) {
     private fun render() {
         list.removeAllViews()
         statusViews.clear()
-        list.addView(Ui.text(ctx, "Aplikace", u * 7, Ui.TEXT, Ui.MEDIUM))
+        renderWindows()
+        list.addView(Ui.text(ctx, "Aplikace", u * 7, Ui.TEXT, Ui.MEDIUM),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 6).toInt() })
         for (item in Updater.catalog) {
             val installed = Updater.installedVersion(ctx, item.packageName)
             val row = LinearLayout(ctx).apply {
@@ -132,6 +134,67 @@ class AppsPage(ctx: Context) : Page(ctx) {
         refreshStatuses()
     }
 
+    // --- Okna: zapnout/vypnout a pořadí -----------------------------------
+
+    private var windowsChanged = false
+
+    /** Pořadí: zapnutá okna v nastaveném pořadí, pod nimi vypnutá. */
+    private fun windowOrder(): Pair<MutableList<String>, List<String>> {
+        val on = app.settings.pageList().filter { it != "apps" && it in Pages.all }.toMutableList()
+        val off = Pages.all.keys.filter { it != "apps" && it !in on }
+        return on to off
+    }
+
+    private fun saveWindows(on: List<String>) {
+        app.settings.pages = on.joinToString(",")
+        if (app.settings.homePage !in on) app.settings.homePage = on.firstOrNull() ?: "clock"
+        windowsChanged = true
+        render()
+    }
+
+    private fun renderWindows() {
+        list.addView(Ui.text(ctx, "Okna", u * 7, Ui.TEXT, Ui.MEDIUM))
+        list.addView(Ui.text(ctx, "Šipkami změníš pořadí, ★ = domovské okno, vypnutá se nezobrazují. Okno Aplikace je vždy poslední.",
+            u * 3.8f, Ui.DIM), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = (u * 1).toInt() })
+        val (on, off) = windowOrder()
+        (on + off).forEach { id ->
+            val enabled = id in on
+            val i = on.indexOf(id)
+            val row = LinearLayout(ctx).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                background = Ui.rounded(Ui.CARD, u * 3)
+                setPadding((u * 4).toInt(), (u * 1.5f).toInt(), (u * 2).toInt(), (u * 1.5f).toInt())
+                alpha = if (enabled) 1f else 0.55f
+            }
+            val home = if (id == app.settings.homePage) "  · domovské" else ""
+            row.addView(Ui.text(ctx, (Pages.all[id]?.title ?: id) + home, u * 5f, Ui.TEXT, Ui.MEDIUM),
+                LinearLayout.LayoutParams(0, -2, 1f))
+            val b = (u * 11).toInt()
+            if (enabled) {
+                row.addView(Ui.button(ctx, "▲", u * 4.5f, if (i > 0) Ui.CARD_HI else Ui.CARD, if (i > 0) Ui.TEXT else Ui.FAINT) {
+                    if (i > 0) { on.add(i - 1, on.removeAt(i)); saveWindows(on) }
+                }, LinearLayout.LayoutParams(b, b))
+                row.addView(Ui.button(ctx, "▼", u * 4.5f, if (i < on.size - 1) Ui.CARD_HI else Ui.CARD,
+                    if (i < on.size - 1) Ui.TEXT else Ui.FAINT) {
+                    if (i < on.size - 1) { on.add(i + 1, on.removeAt(i)); saveWindows(on) }
+                }, LinearLayout.LayoutParams(b, b).apply { leftMargin = (u * 1.5f).toInt() })
+                row.addView(Ui.button(ctx, "★", u * 4.5f, if (home.isNotEmpty()) Ui.PRIMARY else Ui.CARD_HI,
+                    if (home.isNotEmpty()) Ui.BG else Ui.TEXT) {
+                    app.settings.homePage = id; windowsChanged = true; render()
+                }, LinearLayout.LayoutParams(b, b).apply { leftMargin = (u * 1.5f).toInt() })
+            }
+            row.addView(Ui.button(ctx, if (enabled) "Vypnout" else "Zapnout", u * 4f,
+                if (enabled) Ui.CARD_HI else Ui.PRIMARY, if (enabled) Ui.TEXT else Ui.BG) {
+                if (enabled) {
+                    if (on.size > 1) { on.remove(id); saveWindows(on) }
+                } else {
+                    on.add(id); saveWindows(on)
+                }
+            }, LinearLayout.LayoutParams((u * 24).toInt(), -2).apply { leftMargin = (u * 2).toInt() })
+            list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1.5f).toInt() })
+        }
+    }
+
     private var lastStatuses = ""
 
     private fun refreshStatuses() {
@@ -156,5 +219,10 @@ class AppsPage(ctx: Context) : Page(ctx) {
 
     override fun onHide() {
         app.main.removeCallbacks(tick)
+        // změny oken se projeví po odchodu z tohoto okna
+        if (windowsChanged) {
+            windowsChanged = false
+            app.main.post { app.navigator?.invoke("__reload__") }
+        }
     }
 }
