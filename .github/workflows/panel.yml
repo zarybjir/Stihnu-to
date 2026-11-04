@@ -64,6 +64,12 @@ jobs:
       # https://github.com/<repo>/releases/download/panel-latest/panel.apk
       - name: Publish
         run: |
+          # Starší sestavení, které doběhlo později, nesmí přepsat novější verzi.
+          head=$(git ls-remote origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)
+          if [ -n "$head" ] && [ "$head" != "$GITHUB_SHA" ]; then
+            echo "Na větvi je novější commit ($head), vydání přeskakuji."
+            exit 0
+          fi
           cp panel/build/outputs/apk/debug/panel-debug.apk panel.apk
           # Smaže předchozí vydání (i nepovedené koncepty), posune štítek na tuto verzi
           # a vytvoří vydání znovu — odkaz ke stažení zůstává pořád stejný.
