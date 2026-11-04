@@ -14,7 +14,7 @@ import java.time.LocalDateTime
 /**
  * Hlavní okno: vlevo co největší čas (hodiny modře, minuty bíle), nad ním
  * datum, pod ním nejbližší událost. Vpravo úzký sloupec s předpovědí na
- * 10 hodin (ikona, teplota, šance na déšť, mm, vítr) a pod časem souhrn dne. Zároveň vzor pro nové okno.
+ * 10 hodin (ikona, teplota, šance na déšť, mm) a pod časem souhrn dne. Zároveň vzor pro nové okno.
  */
 class ClockPage(ctx: Context) : Page(ctx) {
     private val app = App.instance
@@ -66,7 +66,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
             // --- vpravo úzký sloupec s předpovědí
             val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(10)
             val anyRain = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
-            val colW = if (hrs.isNullOrEmpty()) 0f else h * (if (anyRain) 0.56f else 0.395f)
+            val colW = if (hrs.isNullOrEmpty()) 0f else h * (if (anyRain) 0.47f else 0.31f)
             val r1 = w - pad * 0.9f
             val r0 = r1 - colW
             val t0 = pad * 0.5f
@@ -169,17 +169,17 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 WeatherIcon.draw(c, hr.code, hr.isDay, r0 + h * 0.135f, m, h * 0.062f)
                 temp.textSize = h * 0.048f
                 c.drawText(Ui.deg(hr.temp), r0 + h * 0.26f, m + h * 0.017f, temp)
-                mm.textSize = h * 0.035f
-                c.drawText("${Math.round(hr.wind)}", r0 + h * 0.35f, m + h * 0.013f, mm)
                 if (anyRain && (hr.precipProb >= 20 || hr.precip >= 0.1)) {
                     rain.textSize = h * 0.035f
-                    c.drawText("${hr.precipProb}%", r0 + h * 0.455f, m + h * 0.013f, rain)
+                    c.drawText("${hr.precipProb}%", r0 + h * 0.365f, m + h * 0.013f, rain)
                     mm.textSize = h * 0.032f
                     c.drawText(Ui.num(hr.precip), r1 - h * 0.022f, m + h * 0.012f, mm)
                 }
             }
-            legend.textSize = h * 0.022f
-            c.drawText(if (anyRain) "°C · vítr km/h · déšť · mm" else "°C · vítr km/h", r1 - h * 0.022f, t1 + h * 0.032f, legend)
+            if (anyRain) {
+                legend.textSize = h * 0.022f
+                c.drawText("déšť · mm", r1 - h * 0.022f, t1 + h * 0.032f, legend)
+            }
         }
     }
 }
