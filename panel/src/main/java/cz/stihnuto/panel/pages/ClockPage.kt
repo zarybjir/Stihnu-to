@@ -66,7 +66,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
             // --- vpravo úzký sloupec s předpovědí
             val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(10)
             val anyRain = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
-            val colW = if (hrs.isNullOrEmpty()) 0f else h * (if (anyRain) 0.47f else 0.33f)
+            val colW = if (hrs.isNullOrEmpty()) 0f else h * (if (anyRain) 0.56f else 0.395f)
             val r1 = w - pad * 0.9f
             val r0 = r1 - colW
             val t0 = pad * 0.5f
@@ -132,11 +132,16 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 val top = if (app.calendar.upcoming().isNotEmpty()) chipY + h * 0.045f else base
                 val bottom = h * 0.93f
                 val iy = top + (bottom - top - h * 0.1f) / 2 + h * 0.038f
+                // písmo hodnot se zmenší, kdyby se vedle sebe nevešly
+                var vs = h * 0.058f
+                value2.textSize = vs
+                while (info.maxOf { value2.measureText(it.second) } > iw * 0.92f && vs > h * 0.03f) {
+                    vs *= 0.95f; value2.textSize = vs
+                }
                 info.forEachIndexed { i, (label, value) ->
                     val x = leftL + iw * i + iw / 2
                     small.textSize = h * 0.038f
                     c.drawText(label, x, iy, small)
-                    value2.textSize = h * 0.058f
                     c.drawText(value, x, iy + h * 0.065f, value2)
                 }
             }
@@ -158,19 +163,19 @@ class ClockPage(ctx: Context) : Page(ctx) {
                     fill.color = Ui.FAINT
                     c.drawRect(r0 + h * 0.02f, y, r1 - h * 0.02f, y + 1.5f, fill)
                 }
-                hourLabel.textSize = h * 0.034f
+                hourLabel.textSize = h * 0.042f
                 hourLabel.color = if (i == 0) Ui.TEXT else Ui.DIM
-                c.drawText(if (i == 0) "teď" else "${hr.time.hour}", r0 + h * 0.025f, m + h * 0.012f, hourLabel)
-                WeatherIcon.draw(c, hr.code, hr.isDay, r0 + h * 0.11f, m, h * 0.05f)
-                temp.textSize = h * 0.038f
-                c.drawText(Ui.deg(hr.temp), r0 + h * 0.215f, m + h * 0.013f, temp)
-                mm.textSize = h * 0.028f
-                c.drawText("${Math.round(hr.wind)}", r0 + h * 0.29f, m + h * 0.01f, mm)
+                c.drawText(if (i == 0) "teď" else "${hr.time.hour}", r0 + h * 0.028f, m + h * 0.015f, hourLabel)
+                WeatherIcon.draw(c, hr.code, hr.isDay, r0 + h * 0.135f, m, h * 0.062f)
+                temp.textSize = h * 0.048f
+                c.drawText(Ui.deg(hr.temp), r0 + h * 0.26f, m + h * 0.017f, temp)
+                mm.textSize = h * 0.035f
+                c.drawText("${Math.round(hr.wind)}", r0 + h * 0.35f, m + h * 0.013f, mm)
                 if (anyRain && (hr.precipProb >= 20 || hr.precip >= 0.1)) {
-                    rain.textSize = h * 0.028f
-                    c.drawText("${hr.precipProb}%", r0 + h * 0.375f, m + h * 0.01f, rain)
-                    mm.textSize = h * 0.026f
-                    c.drawText(Ui.num(hr.precip), r1 - h * 0.022f, m + h * 0.01f, mm)
+                    rain.textSize = h * 0.035f
+                    c.drawText("${hr.precipProb}%", r0 + h * 0.455f, m + h * 0.013f, rain)
+                    mm.textSize = h * 0.032f
+                    c.drawText(Ui.num(hr.precip), r1 - h * 0.022f, m + h * 0.012f, mm)
                 }
             }
             legend.textSize = h * 0.022f
