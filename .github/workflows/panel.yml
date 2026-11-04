@@ -61,8 +61,13 @@ jobs:
       - name: Publish
         run: |
           cp panel/build/outputs/apk/debug/panel-debug.apk panel.apk
-          gh release delete panel-latest --yes --cleanup-tag || true
-          gh release create panel-latest panel.apk --prerelease --target "$GITHUB_SHA" \
+          # Smaže předchozí vydání (i nepovedené koncepty), posune štítek na tuto verzi
+          # a vytvoří vydání znovu — odkaz ke stažení zůstává pořád stejný.
+          gh release list --limit 50 --json tagName,name,isDraft \
+            --jq '.[] | select(.name | startswith("Panel pro hodiny")) | .tagName' |
+            while read -r t; do gh release delete "$t" --yes || true; done
+          git push -f origin "$GITHUB_SHA:refs/tags/panel-latest"
+          gh release create panel-latest panel.apk --prerelease --verify-tag \
             --title "Panel pro hodiny (nejnovější)" \
             --notes "Automaticky sestaveno z $GITHUB_SHA. Instalace: viz panel/README.md."
         env:
