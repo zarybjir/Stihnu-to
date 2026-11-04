@@ -32,6 +32,7 @@ class App : Application() {
     lateinit var heating: HeatingRepo
     lateinit var media: MediaRepo
     lateinit var calendar: CalendarRepo
+    lateinit var radar: RadarRepo
     private var server: WebServer? = null
 
     /** Nastaví MainActivity — přepne okno. */
@@ -46,6 +47,7 @@ class App : Application() {
         heating = HeatingRepo(this)
         media = MediaRepo(this)
         calendar = CalendarRepo(this)
+        radar = RadarRepo(this)
         server = WebServer(this, 8080).also { it.start() }
     }
 
