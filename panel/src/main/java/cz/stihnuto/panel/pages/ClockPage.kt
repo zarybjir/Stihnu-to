@@ -14,7 +14,7 @@ import java.time.LocalDateTime
 /**
  * Hlavní okno: vlevo co největší čas (hodiny modře, minuty bíle), nad ním
  * datum, pod ním nejbližší událost. Vpravo úzký sloupec s předpovědí na
- * 12 hodin (ikona, teplota, šance na déšť, mm, vítr) a pod časem souhrn dne. Zároveň vzor pro nové okno.
+ * 10 hodin (ikona, teplota, šance na déšť, mm, vítr) a pod časem souhrn dne. Zároveň vzor pro nové okno.
  */
 class ClockPage(ctx: Context) : Page(ctx) {
     private val app = App.instance
@@ -64,7 +64,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
             val wx = app.weather.data
 
             // --- vpravo úzký sloupec s předpovědí
-            val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(12)
+            val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(10)
             val anyRain = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
             val colW = if (hrs.isNullOrEmpty()) 0f else h * (if (anyRain) 0.47f else 0.33f)
             val r1 = w - pad * 0.9f
@@ -128,7 +128,10 @@ class ClockPage(ctx: Context) : Page(ctx) {
                     sun,
                 )
                 val iw = (leftR - leftL) / info.size
-                val iy = if (app.calendar.upcoming().isNotEmpty()) chipY + h * 0.125f else chipY + h * 0.01f
+                // svisle doprostřed mezi čas (nebo událost) a spodní okraj
+                val top = if (app.calendar.upcoming().isNotEmpty()) chipY + h * 0.045f else base
+                val bottom = h * 0.93f
+                val iy = top + (bottom - top - h * 0.1f) / 2 + h * 0.038f
                 info.forEachIndexed { i, (label, value) ->
                     val x = leftL + iw * i + iw / 2
                     small.textSize = h * 0.038f
@@ -138,7 +141,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 }
             }
 
-            // --- předpověď na 12 hodin
+            // --- předpověď na 10 hodin
             if (hrs.isNullOrEmpty()) return
             fill.color = Ui.CARD
             c.drawRoundRect(RectF(r0, t0, r1, t1), h * 0.04f, h * 0.04f, fill)
