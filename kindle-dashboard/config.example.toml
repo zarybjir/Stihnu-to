@@ -1,0 +1,36 @@
+# Zkopíruj jako config.toml a vyplň.
+
+[server]
+port = 8080
+# Volitelné heslo v adrese: http://<ip>:8080/?k=TAJNE
+# Prázdné = kdokoli v domácí síti může ovládat topení.
+token = ""
+# Jak často se Kindle sám obnoví (sekundy).
+refresh = 300
+tz = "Europe/Prague"
+
+[weather]
+# Souřadnice (např. z mapy.cz → pravé tlačítko → souřadnice).
+name = "Praha"
+lat = 50.0755
+lon = 14.4378
+
+[calendar]
+# Google Kalendář → Nastavení → (kalendář) → „Tajná adresa ve formátu iCal".
+# Funguje i iCloud / Outlook / Seznam — cokoli, co dá .ics odkaz.
+ics = [
+  # "https://calendar.google.com/calendar/ical/.../basic.ics",
+]
+days = 7
+
+[tapo]
+# Přihlašovací údaje k účtu v aplikaci Tapo (lokální ovládání je vyžaduje).
+username = "tvuj@email.cz"
+password = "heslo"
+# IP adresy hubu H100 / zásuvek. Nejlíp nastav v routeru pevné IP.
+# Prázdné = najde zařízení sám (broadcast v síti), trvá to pár sekund.
+hosts = [
+  # "192.168.1.50",
+]
+# Krok šipek u termostatu (°C).
+step = 0.5
