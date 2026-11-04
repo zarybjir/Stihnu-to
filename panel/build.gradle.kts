@@ -11,8 +11,8 @@ android {
         applicationId = "cz.stihnuto.panel"
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
-        versionName = "0.11"
+        versionCode = 12
+        versionName = "0.12"
     }
 
     // Stálý podpisový klíč (GitHub secret PANEL_KEYSTORE_B64 + PANEL_KEYSTORE_PASSWORD).
