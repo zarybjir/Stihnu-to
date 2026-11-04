@@ -11,6 +11,9 @@ on:
       - "build.gradle.kts"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,7 +27,17 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Keystore
+        env:
+          KS_B64: ${{ secrets.PANEL_KEYSTORE_B64 }}
+        if: env.KS_B64 != ''
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/panel.keystore"
+          echo "PANEL_KEYSTORE=$RUNNER_TEMP/panel.keystore" >> "$GITHUB_ENV"
+
       - name: Build
+        env:
+          PANEL_KEYSTORE_PASSWORD: ${{ secrets.PANEL_KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
           set +e
@@ -42,3 +55,15 @@ jobs:
         with:
           name: panel-apk
           path: panel/build/outputs/apk/debug/panel-debug.apk
+
+      # Veřejný odkaz ke stažení přímo do hodin:
+      # https://github.com/<repo>/releases/download/panel-latest/panel.apk
+      - name: Publish
+        run: |
+          cp panel/build/outputs/apk/debug/panel-debug.apk panel.apk
+          gh release delete panel-latest --yes --cleanup-tag || true
+          gh release create panel-latest panel.apk --prerelease --target "$GITHUB_SHA" \
+            --title "Panel pro hodiny (nejnovější)" \
+            --notes "Automaticky sestaveno z $GITHUB_SHA. Instalace: viz panel/README.md."
+        env:
+          GH_TOKEN: ${{ github.token }}

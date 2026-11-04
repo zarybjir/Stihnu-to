@@ -62,6 +62,10 @@ ${field("claude_model", "Model", s.claudeModel, "Výchozí <code>claude-opus-5-5
 <button>Uložit</button>
 </form>
 
+<h2>Aktualizace</h2>
+<form method="post" action="/update"><button>Stáhnout a nainstalovat nejnovější verzi</button></form>
+<small id="upd">Verze ${esc(versionName(app))}. Po stažení potvrď instalaci na displeji hodin.</small>
+
 <h2>Zeptej se Clauda</h2>
 <textarea id="ask" rows="2" placeholder="Zatop v obýváku na 22 stupňů"></textarea>
 <button onclick="ask()">Poslat</button>
@@ -72,6 +76,7 @@ ${field("claude_model", "Model", s.claudeModel, "Výchozí <code>claude-opus-5-5
 Popis je v README v repozitáři.</small>
 
 <script>
+if(location.search.indexOf('aktualizace')>=0)setInterval(function(){fetch('/api/update').then(r=>r.json()).then(function(j){document.getElementById('upd').textContent=j.status;});},1500);
 if(location.search.indexOf('ulozeno')>=0)document.getElementById('saved').innerHTML='<p class="ok">Uloženo.</p>';
 var t;document.getElementById('q').addEventListener('input',function(e){clearTimeout(t);var v=e.target.value;t=setTimeout(function(){
 if(v.length<2)return;fetch('https://geocoding-api.open-meteo.com/v1/search?count=5&language=cs&name='+encodeURIComponent(v)).then(r=>r.json()).then(function(j){
@@ -84,6 +89,9 @@ fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body
 </script>
 </body></html>"""
     }
+
+    private fun versionName(app: App): String =
+        app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "?"
 
     fun save(app: App, f: Map<String, String>) {
         val s = app.settings

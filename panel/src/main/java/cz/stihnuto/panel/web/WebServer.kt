@@ -99,6 +99,11 @@ class WebServer(private val app: App, private val port: Int) {
                 app.onSettingsChanged()
                 redirect(out, "/?ulozeno=1")
             }
+            r.path == "/update" && r.method == "POST" -> {
+                cz.stihnuto.panel.Updater.update(app)
+                redirect(out, "/?aktualizace=1")
+            }
+            r.path == "/api/update" -> json(out, JSONObject().put("status", cz.stihnuto.panel.Updater.status))
             r.path == "/api/state" -> json(out, state())
             r.path == "/api/page" -> {
                 val page = r.json().optString("page")

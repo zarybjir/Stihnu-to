@@ -15,6 +15,21 @@ android {
         versionName = "0.1"
     }
 
+    // Stálý podpisový klíč (GitHub secret PANEL_KEYSTORE_B64 + PANEL_KEYSTORE_PASSWORD).
+    // Díky němu se každá nová verze nainstaluje přes starou a nastavení zůstane.
+    // Bez něj se podepíše náhodným ladicím klíčem.
+    val ksPath = System.getenv("PANEL_KEYSTORE")
+    if (ksPath != null) {
+        signingConfigs {
+            getByName("debug") {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("PANEL_KEYSTORE_PASSWORD")
+                keyAlias = "panel"
+                keyPassword = System.getenv("PANEL_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
