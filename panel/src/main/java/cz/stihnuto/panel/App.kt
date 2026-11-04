@@ -299,7 +299,8 @@ class MediaRepo(app: App) : Repo(app) {
     /** Otevře aplikaci (youtube_music, youtube). Vrací false, když není nainstalovaná. */
     fun openApp(key: String, query: String? = null): Boolean {
         val pkgs = when (key) {
-            "youtube" -> listOf(APPS["youtube"]!!, APPS["smarttube"]!!)
+            "youtube" -> listOf(APPS.getValue("youtube"), APPS.getValue("newpipe"))
+            "youtube_music" -> listOf(APPS.getValue("youtube_music"), APPS.getValue("simpmusic"))
             else -> listOf(APPS[key] ?: key)
         }
         for (pkg in pkgs) {
@@ -319,7 +320,8 @@ class MediaRepo(app: App) : Repo(app) {
         val APPS = linkedMapOf(
             "youtube_music" to "com.google.android.apps.youtube.music",
             "youtube" to "com.google.android.youtube",
-            "smarttube" to "com.liskovsoft.smarttubetv.beta",
+            "simpmusic" to "com.maxrave.simpmusic",
+            "newpipe" to "org.schabi.newpipe",
         )
     }
 }

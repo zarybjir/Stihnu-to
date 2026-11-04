@@ -105,7 +105,8 @@ class MusicPage(ctx: Context) : Page(ctx) {
 
     private fun open(key: String) {
         if (!app.media.openApp(key)) {
-            hint.text = "Aplikace není nainstalovaná. Nahraj ji do hodin stejně jako tenhle panel."
+            hint.text = "Aplikace není nainstalovaná — nainstaluj ji v okně Aplikace (poslední okno)."
+            App.instance.showPage("apps")
             hint.gone(false)
         }
     }

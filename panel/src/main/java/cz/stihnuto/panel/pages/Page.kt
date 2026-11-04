@@ -32,5 +32,6 @@ object Pages {
         "music" to Info("Hudba") { MusicPage(it) },
         "heating" to Info("Topení") { HeatingPage(it) },
         "claude" to Info("Claude") { ClaudePage(it) },
+        "apps" to Info("Aplikace") { AppsPage(it) },
     )
 }

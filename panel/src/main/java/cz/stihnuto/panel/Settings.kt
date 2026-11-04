@@ -33,8 +33,9 @@ class Settings(ctx: Context) {
     /** Jas v noci 1–100 %, 0 = neměnit. */
     var nightBrightness: Int by int("night_brightness", 8)
 
+    /** Okno Aplikace je vždy poslední — přes něj jdou aktualizace. */
     fun pageList(): List<String> =
-        pages.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        pages.split(',').map { it.trim() }.filter { it.isNotEmpty() && it != "apps" } + "apps"
 
     // --- jednoduché delegáty nad SharedPreferences
     private fun str(key: String, def: String) = Pref({ p.getString(key, def) ?: def }) {

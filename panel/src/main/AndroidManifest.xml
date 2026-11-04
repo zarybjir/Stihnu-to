@@ -12,7 +12,8 @@
     <queries>
         <package android:name="com.google.android.apps.youtube.music" />
         <package android:name="com.google.android.youtube" />
-        <package android:name="com.liskovsoft.smarttubetv.beta" />
+        <package android:name="com.maxrave.simpmusic" />
+        <package android:name="org.schabi.newpipe" />
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
