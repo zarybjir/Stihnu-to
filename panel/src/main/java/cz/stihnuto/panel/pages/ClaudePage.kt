@@ -87,11 +87,15 @@ class ClaudePage(ctx: Context) : Page(ctx) {
     private fun idle() {
         val noKey = if (app.settings.aiProvider == "gemini") app.settings.geminiKey.isBlank() else app.settings.anthropicKey.isBlank()
         status.text = if (noKey) "Nejdřív vlož klíč (Claude nebo Gemini) v nastavení"
-        else if (SpeechRecognizer.isRecognitionAvailable(ctx)) "Klepni a mluv" else "Rozpoznávání řeči není k dispozici — použij tlačítka"
+        else if (SpeechRecognizer.isRecognitionAvailable(ctx) || cz.stihnuto.panel.VoiceWake.running) "Klepni a mluv, nebo řekni „prosím Pepo“"
+        else "Zapni hlasovou aktivaci v okně Aplikace — pak půjde mluvit"
         mic.active = false
     }
 
     private fun listen() {
+        if (!SpeechRecognizer.isRecognitionAvailable(ctx) && cz.stihnuto.panel.VoiceWake.captureCommand()) {
+            return // Vosk: onWake ukáže „Poslouchám…“, povel přijde přes onCommand
+        }
         if (!SpeechRecognizer.isRecognitionAvailable(ctx)) {
             status.text = "Rozpoznávání řeči tu není. Zkus tlačítka vpravo."
             return

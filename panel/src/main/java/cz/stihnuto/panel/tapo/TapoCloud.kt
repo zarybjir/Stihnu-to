@@ -99,6 +99,22 @@ class TapoCloud(private val user: String, private val pass: String) {
 
     // ------------------------------------------------------------------
 
+    companion object {
+        /** TLS jen s certifikačními autoritami TP-Link (cloud TP-Link nepoužívá veřejné CA). */
+        val tplinkSsl: javax.net.ssl.SSLSocketFactory by lazy {
+            val app = cz.stihnuto.panel.App.instance
+            val id = app.resources.getIdentifier("tplink_ca", "raw", app.packageName)
+            val cf = java.security.cert.CertificateFactory.getInstance("X.509")
+            val ks = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType()).apply { load(null, null) }
+            app.resources.openRawResource(id).use { input ->
+                cf.generateCertificates(input).forEachIndexed { i, cert -> ks.setCertificateEntry("tplink$i", cert) }
+            }
+            val tmf = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm())
+                .apply { init(ks) }
+            javax.net.ssl.SSLContext.getInstance("TLS").apply { init(null, tmf.trustManagers, null) }.socketFactory
+        }
+    }
+
     private fun post(app: App, base: String, path: String, token: String?, body: JSONObject): JSONObject {
         val json = body.toString()
         val q = linkedMapOf(
@@ -114,6 +130,7 @@ class TapoCloud(private val user: String, private val pass: String) {
         val sig = mac.doFinal("$md5\n9999999999\n$nonce\n$path".toByteArray()).joinToString("") { "%02x".format(it) }
 
         val c = URL(base.trimEnd('/') + path + "?" + query).openConnection() as HttpURLConnection
+        if (c is javax.net.ssl.HttpsURLConnection) c.sslSocketFactory = tplinkSsl
         c.requestMethod = "POST"
         c.doOutput = true
         c.connectTimeout = 15000

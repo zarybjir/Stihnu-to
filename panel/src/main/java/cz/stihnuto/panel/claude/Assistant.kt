@@ -45,6 +45,7 @@ class Assistant(private val app: App) {
                     askGemini(text)
                 } catch (e: Exception) {
                     Log.w("Panel", "gemini", e)
+                    synchronized(this) { gHistory.clear() }
                     e.message ?: "Nepovedlo se spojit s Gemini."
                 })
                 return@execute
@@ -71,7 +72,7 @@ class Assistant(private val app: App) {
         if (key.isEmpty()) return "Nejdřív vlož klíč k Claude API v nastavení na počítači."
         if (client == null || key != clientKey) {
             client?.close()
-            client = AnthropicOkHttpClient.builder().apiKey(key).timeout(Duration.ofSeconds(60)).build()
+            client = AnthropicOkHttpClient.builder().apiKey(key).timeout(Duration.ofSeconds(25)).build()
             clientKey = key
         }
         // Po pěti minutách ticha začne nový rozhovor.
@@ -142,7 +143,7 @@ class Assistant(private val app: App) {
                 .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemPrompt()))))
                 .put("contents", JSONArray(gHistory))
                 .put("tools", JSONArray().put(JSONObject().put("functionDeclarations", GEMINI_TOOLS)))
-            val resp = geminiPost(model, key, body)
+            val resp = geminiWithRetry(model, key, body)
             val cand = resp.optJSONArray("candidates")?.optJSONObject(0)
             val content = cand?.optJSONObject("content")
             if (content == null) {
@@ -173,13 +174,31 @@ class Assistant(private val app: App) {
         return "Hotovo."
     }
 
+    /** Gemini bývá občas přetížený — místo dlouhého čekání to hned zkusit znovu, případně lehčím modelem. */
+    private fun geminiWithRetry(model: String, key: String, body: JSONObject): JSONObject {
+        val models = if (model == "gemini-flash-lite-latest") listOf(model, model) else listOf(model, "gemini-flash-lite-latest")
+        var last: Exception? = null
+        for (m in models) {
+            try {
+                return geminiPost(m, key, body)
+            } catch (e: java.net.SocketTimeoutException) {
+                last = java.io.IOException("Gemini neodpověděl včas.")
+            } catch (e: java.io.IOException) {
+                last = e
+                val msg = e.message ?: ""
+                if (!(msg.contains("503") || msg.contains("demand", true) || msg.contains("overload", true) || msg.contains("UNAVAILABLE"))) throw e
+            }
+        }
+        throw last ?: java.io.IOException("Gemini neodpověděl.")
+    }
+
     private fun geminiPost(model: String, key: String, body: JSONObject): JSONObject {
         val c = java.net.URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
             .openConnection() as java.net.HttpURLConnection
         c.requestMethod = "POST"
         c.doOutput = true
         c.connectTimeout = 15000
-        c.readTimeout = 60000
+        c.readTimeout = 12000
         c.setRequestProperty("Content-Type", "application/json")
         c.setRequestProperty("x-goog-api-key", key)
         try {
@@ -187,11 +206,11 @@ class Assistant(private val app: App) {
             val code = c.responseCode
             val text = (if (code in 200..299) c.inputStream else c.errorStream)?.use { String(it.readBytes(), Charsets.UTF_8) } ?: ""
             if (code !in 200..299) {
-                gHistory.clear()
                 val msg = try { JSONObject(text).optJSONObject("error")?.optString("message") } catch (e: Exception) { null }
                 throw java.io.IOException(when (code) {
                     400, 401, 403 -> "Gemini odmítl dotaz ($code). Zkontroluj klíč a název modelu. ${msg ?: ""}".trim()
                     429 -> "Vyčerpaný bezplatný limit Gemini, zkus to později."
+                    503 -> "Gemini je přetížený (503). ${msg ?: ""}".trim()
                     else -> "Gemini vrátil chybu $code. ${msg ?: ""}".trim()
                 })
             }
@@ -208,10 +227,36 @@ class Assistant(private val app: App) {
             Odpovědi se čtou nahlas: jedna až dvě krátké věty, bez odrážek a bez markdownu.
             Hudbu pouštěj nástrojem play_music, pauzu, další skladbu a hlasitost nástrojem media_control.
             Ovládáš panel nástroji. Než něco nastavíš, nemusíš se ptát — prostě to udělej a stručně potvrď.
-            Když se ptají na počasí nebo stav domu, nejdřív zavolej get_status.
+            Na běžné otázky odpověz rovnou z přehledu níže. get_status volej jen, když potřebuješ podrobnosti
+            (hodinová předpověď, další dny, kalendář na delší dobu).
             Okna panelu: $pages.
-            Teď je ${Ui.dateLong(LocalDateTime.now().toLocalDate())}, ${Ui.time(LocalDateTime.now())}.
+            Je ${Ui.dateLong(LocalDateTime.now().toLocalDate())}, ${Ui.time(LocalDateTime.now())}.
+
+            Přehled:
+            ${brief()}
         """.trimIndent()
+    }
+
+    /** Stručný stav do zadání — většinou ušetří jeden dotaz navíc (rychlejší odpověď). */
+    private fun brief(): String {
+        val out = mutableListOf<String>()
+        app.weather.data?.let { w ->
+            out += "Venku ${Ui.num(w.current.temp)} °C, ${WeatherApi.describe(w.current.code)}, vítr ${Math.round(w.current.wind)} km/h."
+            w.days.getOrNull(0)?.let { d -> out += "Dnes ${Ui.deg(d.max)}/${Ui.deg(d.min)}, srážky ${Ui.num(d.precipSum)} mm (${d.precipProb} %)." }
+            w.days.getOrNull(1)?.let { d -> out += "Zítra ${Ui.deg(d.max)}/${Ui.deg(d.min)}, ${WeatherApi.describe(d.code)}, srážky ${d.precipProb} %." }
+        }
+        val heat = app.heating.children.filter { it.isValve }
+        if (heat.isNotEmpty()) out += "Topení: " + heat.joinToString("; ") { c ->
+            "${c.name} ${Ui.num(c.currentTemp)} °C" + if (!c.on) " (vypnuto)" else " → cíl ${Ui.num(c.targetTemp)} °C${if (c.heating) ", topí" else ""}"
+        } + "."
+        app.calendar.upcoming().take(3).takeIf { it.isNotEmpty() }?.let { ev ->
+            out += "Kalendář: " + ev.joinToString("; ") { e ->
+                "${Ui.dayShort(e.start.toLocalDate())} ${if (e.allDay) "celý den" else Ui.time(e.start)} ${e.title}"
+            } + "."
+        }
+        app.media.title?.let { out += "Hraje: $it${app.media.artist?.let { a -> " – $a" } ?: ""}${if (app.media.isPlaying) "" else " (pauza)"}." }
+        app.co2.co2?.takeIf { app.co2.fresh }?.let { out += "Vzduch v místnosti: CO₂ $it ppm (${Co2Meter.level(it).second})." }
+        return out.joinToString("\n")
     }
 
     // ------------------------------------------------------------------

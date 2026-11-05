@@ -24,6 +24,11 @@ object VoiceWake {
 
     @Volatile var status: String = ""
         private set
+    /** Co hodiny naposledy rozpoznaly (diagnostika). */
+    @Volatile var lastHeard: String = ""
+        private set
+    @Volatile var lastHeardAt = 0L
+        private set
 
     /** Okno Claude se přihlásí, aby povel zobrazilo a odpověď přečetlo nahlas. */
     var onCommand: ((String) -> Unit)? = null
@@ -146,7 +151,9 @@ object VoiceWake {
 
     private fun listener(app: App) = object : RecognitionListener {
         override fun onPartialResult(hypothesis: String?) {
-            val text = norm(JSONObject(hypothesis ?: "{}").optString("partial"))
+            val raw = JSONObject(hypothesis ?: "{}").optString("partial")
+            if (raw.isNotBlank()) { lastHeard = raw; lastHeardAt = System.currentTimeMillis() }
+            val text = norm(raw)
             if (!awaitingCommand && wakeRegex(app).containsMatchIn(text)) wake()
         }
 
@@ -160,6 +167,14 @@ object VoiceWake {
         override fun onTimeout() {}
     }
 
+    /** Klepnutí na mikrofon: další věta je povel (bez „prosím Pepo“). */
+    fun captureCommand(): Boolean {
+        if (service == null) return false
+        pause(false)
+        wake()
+        return true
+    }
+
     private fun wake() {
         awaitingCommand = true
         wakeAt = System.currentTimeMillis()
@@ -168,6 +183,7 @@ object VoiceWake {
 
     private fun handle(app: App, raw: String) {
         val text = raw.trim()
+        if (text.isNotEmpty()) { lastHeard = text; lastHeardAt = System.currentTimeMillis() }
         if (awaitingCommand && System.currentTimeMillis() - wakeAt > 10_000) awaitingCommand = false
         val n = norm(text)
         val m = wakeRegex(app).find(n)

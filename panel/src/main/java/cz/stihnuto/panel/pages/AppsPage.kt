@@ -409,7 +409,21 @@ class AppsPage(ctx: Context) : Page(ctx) {
             render()
         }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 2).toInt() })
         box.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
-        box.addView(Ui.text(ctx, "Klíč Gemini zdarma: aistudio.google.com/apikey", u * 3.6f, Ui.DIM))
+        // model
+        val models = if (s.aiProvider == "gemini") listOf("gemini-flash-lite-latest" to "Rychlý (Lite)", "gemini-flash-latest" to "Chytřejší (Flash)")
+        else listOf("claude-haiku-5-5" to "Haiku (levný, rychlý)", "claude-opus-5-5" to "Opus (nejchytřejší)")
+        val current = if (s.aiProvider == "gemini") s.geminiModel else s.claudeModel
+        val mRow = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        mRow.addView(Ui.text(ctx, "Model:", u * 4f, Ui.DIM), LinearLayout.LayoutParams(-2, -2).apply { rightMargin = (u * 2).toInt() })
+        for ((id, label) in models) {
+            val on = current == id
+            mRow.addView(Ui.button(ctx, label, u * 3.8f, if (on) Ui.PRIMARY else Ui.CARD_HI, if (on) Ui.BG else Ui.TEXT) {
+                if (s.aiProvider == "gemini") s.geminiModel = id else s.claudeModel = id
+                render()
+            }, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = (u * 2).toInt() })
+        }
+        box.addView(mRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
+        box.addView(Ui.text(ctx, "Klíč Gemini zdarma: aistudio.google.com/apikey · Klíč pošleš i přes „Poslat z mobilu“", u * 3.6f, Ui.DIM))
         return box
     }
 
@@ -451,7 +465,12 @@ class AppsPage(ctx: Context) : Page(ctx) {
     private var lastStatuses = ""
 
     private fun refreshStatuses() {
-        voiceStatus?.text = cz.stihnuto.panel.VoiceWake.status
+        val vw = cz.stihnuto.panel.VoiceWake
+        val ago = (System.currentTimeMillis() - vw.lastHeardAt) / 1000
+        voiceStatus?.text = vw.status + if (vw.running) {
+            if (vw.lastHeardAt == 0L) "\nZatím nic neslyšel — zkus mluvit nahlas u hodin (mikrofon možná drží Google)."
+            else "\nNaposledy slyšeno (před $ago s): „${vw.lastHeard}“"
+        } else ""
         val all = Updater.catalog.joinToString("|") { Updater.status(it.key) }
         for (item in Updater.catalog) statusViews[item.key]?.let { v ->
             val s = Updater.status(item.key)
