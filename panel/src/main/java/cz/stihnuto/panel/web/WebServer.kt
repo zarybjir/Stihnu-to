@@ -211,14 +211,26 @@ class WebServer(private val app: App, private val port: Int) {
             URLDecoder.decode(k, "UTF-8") to URLDecoder.decode(v, "UTF-8")
         }
 
-        /** IP adresa hodin v domácí síti. */
-        fun localIp(): String? = try {
+        /** Všechny IPv4 adresy hodin (rozhraní → adresa), WiFi první. */
+        fun localIps(): List<Pair<String, String>> = try {
             NetworkInterface.getNetworkInterfaces().toList()
                 .filter { it.isUp && !it.isLoopback }
-                .flatMap { it.inetAddresses.toList() }
-                .firstOrNull { it is Inet4Address && !it.isLoopbackAddress }?.hostAddress
+                .flatMap { nif -> nif.inetAddresses.toList().filter { it is Inet4Address }.map { nif.name to it.hostAddress!! } }
+                .sortedBy { (name, ip) ->
+                    when {
+                        name.startsWith("wlan") && ip.isPrivate() -> 0
+                        ip.isPrivate() && !name.startsWith("p2p") -> 1
+                        else -> 2
+                    }
+                }
         } catch (e: Exception) {
-            null
+            emptyList()
         }
+
+        private fun String.isPrivate() = startsWith("192.168.") || startsWith("10.") ||
+            Regex("^172\\.(1[6-9]|2\\d|3[01])\\.").containsMatchIn(this)
+
+        /** IP adresa hodin v domácí síti. */
+        fun localIp(): String? = localIps().firstOrNull()?.second
     }
 }

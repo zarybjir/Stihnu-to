@@ -34,6 +34,14 @@ class AppsPage(ctx: Context) : Page(ctx) {
     private fun render() {
         list.removeAllViews()
         statusViews.clear()
+        // adresa nastavení pro PC / mobil
+        val ips = cz.stihnuto.panel.web.WebServer.localIps()
+        list.addView(Ui.text(ctx, "Nastavení v prohlížeči (stejná WiFi):", u * 4f, Ui.DIM))
+        list.addView(Ui.text(ctx, ips.firstOrNull()?.let { "http://${it.second}:8080" } ?: "hodiny nejsou připojené k síti",
+            u * 6.5f, Ui.PRIMARY, Ui.MEDIUM))
+        if (ips.size > 1) list.addView(Ui.text(ctx, "Další adresy: " +
+            ips.drop(1).joinToString { "${it.second} (${it.first})" }, u * 3.6f, Ui.DIM))
+        list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 5).toInt()))
         renderWindows()
         list.addView(Ui.text(ctx, "Aplikace", u * 7, Ui.TEXT, Ui.MEDIUM),
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 6).toInt() })
