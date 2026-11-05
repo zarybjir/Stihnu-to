@@ -11,8 +11,8 @@ android {
         applicationId = "cz.stihnuto.panel"
         minSdk = 26
         targetSdk = 34
-        versionCode = 30
-        versionName = "0.30"
+        versionCode = 31
+        versionName = "0.31"
         ndk { abiFilters += setOf("armeabi-v7a", "arm64-v8a") }
     }
 
@@ -67,4 +67,6 @@ dependencies {
     // Hlasová aktivace „prosím Pepo“ — rozpoznávání řeči přímo v hodinách (offline)
     implementation("net.java.dev.jna:jna:5.18.1@aar")
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
+    // QR kód pro „Poslat z mobilu“
+    implementation("com.google.zxing:core:3.5.3")
 }

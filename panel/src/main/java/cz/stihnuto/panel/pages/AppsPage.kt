@@ -49,6 +49,10 @@ class AppsPage(ctx: Context) : Page(ctx) {
         list.addView(diagRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1.5f).toInt() })
         list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
 
+        // poslat klíč / kalendář z mobilu přes QR kód
+        list.addView(phoneBox())
+        list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
+
         // asistent: výběr a klíč přímo na hodinách
         list.addView(assistantBox())
         list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
@@ -283,6 +287,45 @@ class AppsPage(ctx: Context) : Page(ctx) {
         }
     }
 
+    private var qrBitmap: android.graphics.Bitmap? = null
+
+    private fun phoneBox(): View {
+        val box = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+        }
+        val inbox = cz.stihnuto.panel.PhoneInbox
+        val url = inbox.url
+        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(Ui.text(ctx, "Poslat z mobilu", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+        if (url == null) {
+            col.addView(Ui.text(ctx, "Klíč Gemini/Claude nebo odkaz na kalendář pošleš z mobilu — bez psaní na hodinách.",
+                u * 3.8f, Ui.DIM))
+            box.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+            box.addView(Ui.button(ctx, "Zobrazit QR", u * 4.2f, Ui.ACCENT, Ui.BG) {
+                inbox.onChange = { render() }
+                inbox.start(app)
+                render()
+            })
+        } else {
+            col.addView(Ui.text(ctx, "1. Načti QR kód foťákem v mobilu.\n2. Na stránce klepni na tlačítko pro novou zprávu, " +
+                "vlož klíč nebo odkaz a odešli.", u * 3.8f, Ui.DIM))
+            col.addView(Ui.text(ctx, url, u * 3.6f, Ui.PRIMARY).apply { setTextIsSelectable(false) })
+            col.addView(Ui.text(ctx, inbox.status, u * 4.2f, Ui.ACCENT, Ui.MEDIUM),
+                LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
+            col.addView(Ui.button(ctx, "Hotovo", u * 4.2f) {
+                inbox.stop(); qrBitmap = null; render()
+            }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 2).toInt() })
+            box.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+            val size = (u * 38).toInt()
+            val bmp = qrBitmap ?: inbox.qr(url, size).also { qrBitmap = it }
+            box.addView(android.widget.ImageView(ctx).apply { setImageBitmap(bmp) },
+                LinearLayout.LayoutParams(size, size).apply { leftMargin = (u * 3).toInt() })
+        }
+        return box
+    }
+
     private var diagText: TextView? = null
     private var diagNote = ""
 
@@ -411,6 +454,8 @@ class AppsPage(ctx: Context) : Page(ctx) {
 
     override fun onHide() {
         app.main.removeCallbacks(tick)
+        cz.stihnuto.panel.PhoneInbox.stop()
+        qrBitmap = null
         // změny oken se projeví po odchodu z tohoto okna
         if (windowsChanged) {
             windowsChanged = false
