@@ -27,8 +27,8 @@ object Ui {
     const val HEAT = 0xFFF28B82.toInt()
     const val GOOD = 0xFF81C995.toInt()
     /** Nebesky modrá — zvýraznění (topí, zapnout). */
-    const val SKY = 0xFF9FD6F7.toInt()
-    const val SKY_BG = 0x269FD6F7
+    const val SKY = 0xFF78BDE8.toInt()
+    const val SKY_BG = 0x2678BDE8
     const val ON_SKY = 0xFF0A2A40.toInt()
 
     val LIGHT: Typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
