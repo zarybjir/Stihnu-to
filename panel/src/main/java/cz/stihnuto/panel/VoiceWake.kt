@@ -6,8 +6,9 @@ import android.util.Log
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
-import org.vosk.android.RecognitionListener
-import org.vosk.android.SpeechService
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import java.io.File
 import java.text.Normalizer
 import java.util.zip.ZipInputStream
@@ -36,45 +37,71 @@ object VoiceWake {
     var onWake: (() -> Unit)? = null
 
     private var model: Model? = null
-    private var service: SpeechService? = null
+    @Volatile private var worker: Thread? = null
+    /** Hlasitost mikrofonu (RMS) za poslední chvíli — diagnostika. */
+    @Volatile var level = 0
+        private set
     private var awaitingCommand = false
     private var wakeAt = 0L
     private var paused = false
 
     private fun modelDir(app: App) = File(app.filesDir, "vosk-cs")
     fun modelReady(app: App) = File(modelDir(app), "am").exists() || modelDir(app).listFiles()?.any { File(it, "am").exists() } == true
-    val running get() = service != null
+    val running get() = worker != null
 
     /** Spustí poslouchání (podle nastavení), případně nejdřív stáhne model. */
     fun start(app: App) {
-        if (!app.settings.voiceWake || service != null) return
+        if (!app.settings.voiceWake || worker != null) return
         if (app.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             status = "Chybí oprávnění k mikrofonu"
             return
         }
-        app.io.execute {
-            try {
-                if (!modelReady(app)) download(app)
-                status = "Načítám model…"
-                val m = model ?: Model(modelPath(app)).also { model = it }
-                val rec = Recognizer(m, 16000f)
-                val svc = SpeechService(rec, 16000f)
-                app.main.post {
-                    service = svc
-                    svc.startListening(listener(app))
-                    status = "Poslouchám na „${app.settings.wakePhrase}“"
+        val t = Thread({ run(app) }, "voice-wake").apply { isDaemon = true }
+        worker = t
+        t.start()
+    }
+
+    /** Vlastní smyčka: mikrofon (zvolený vstup) → Vosk. */
+    private fun run(app: App) {
+        var rec: AudioRecord? = null
+        try {
+            if (!modelReady(app)) download(app)
+            status = "Načítám model…"
+            val m = model ?: Model(modelPath(app)).also { model = it }
+            val recognizer = Recognizer(m, 16000f)
+            val src = app.settings.micSource
+            val min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            rec = AudioRecord(src, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 16000))
+            if (rec.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("mikrofon (vstup $src) nejde otevřít")
+            rec.startRecording()
+            status = "Poslouchám na „${app.settings.wakePhrase}“ (vstup ${MicProbe.name(src)})"
+            val buf = ShortArray(1600) // 0,1 s
+            var sum = 0.0; var count = 0
+            while (worker === Thread.currentThread()) {
+                val n = rec.read(buf, 0, buf.size)
+                if (n <= 0) continue
+                for (i in 0 until n) sum += buf[i].toDouble() * buf[i]
+                count += n
+                if (count >= 8000) { level = Math.sqrt(sum / count).toInt(); sum = 0.0; count = 0 }
+                if (paused) continue
+                if (recognizer.acceptWaveForm(buf, n)) {
+                    handle(app, JSONObject(recognizer.result).optString("text"))
+                } else {
+                    partial(app, JSONObject(recognizer.partialResult).optString("partial"))
                 }
-            } catch (e: Throwable) {
-                Log.w("Panel", "voice wake", e)
-                status = "Hlasová aktivace nejde spustit: ${e.message ?: e.javaClass.simpleName}"
             }
+            recognizer.close()
+        } catch (e: Throwable) {
+            Log.w("Panel", "voice wake", e)
+            status = "Hlasová aktivace nejde spustit: ${e.message ?: e.javaClass.simpleName}"
+            if (worker === Thread.currentThread()) worker = null
+        } finally {
+            try { rec?.stop(); rec?.release() } catch (_: Exception) {}
         }
     }
 
     fun stop() {
-        service?.stop()
-        service?.shutdown()
-        service = null
+        worker = null
         awaitingCommand = false
         status = "Vypnuto"
     }
@@ -82,7 +109,6 @@ object VoiceWake {
     /** Ztlumit poslouchání (když hodiny mluví nebo poslouchá jiné rozpoznávání). */
     fun pause(p: Boolean) {
         paused = p
-        service?.setPause(p)
     }
 
     private fun modelPath(app: App): String {
@@ -149,27 +175,14 @@ object VoiceWake {
         return Regex("\\b" + parts.joinToString("\\s+") + "\\b")
     }
 
-    private fun listener(app: App) = object : RecognitionListener {
-        override fun onPartialResult(hypothesis: String?) {
-            val raw = JSONObject(hypothesis ?: "{}").optString("partial")
-            if (raw.isNotBlank()) { lastHeard = raw; lastHeardAt = System.currentTimeMillis() }
-            val text = norm(raw)
-            if (!awaitingCommand && wakeRegex(app).containsMatchIn(text)) wake()
-        }
-
-        override fun onResult(hypothesis: String?) = handle(app, JSONObject(hypothesis ?: "{}").optString("text"))
-        override fun onFinalResult(hypothesis: String?) = handle(app, JSONObject(hypothesis ?: "{}").optString("text"))
-        override fun onError(exception: Exception?) {
-            status = "Chyba poslouchání: ${exception?.message}"
-            stop()
-            app.main.postDelayed({ start(app) }, 10_000)
-        }
-        override fun onTimeout() {}
+    private fun partial(app: App, raw: String) {
+        if (raw.isNotBlank()) { lastHeard = raw; lastHeardAt = System.currentTimeMillis() }
+        if (!awaitingCommand && wakeRegex(app).containsMatchIn(norm(raw))) wake()
     }
 
     /** Klepnutí na mikrofon: další věta je povel (bez „prosím Pepo“). */
     fun captureCommand(): Boolean {
-        if (service == null) return false
+        if (worker == null) return false
         pause(false)
         wake()
         return true

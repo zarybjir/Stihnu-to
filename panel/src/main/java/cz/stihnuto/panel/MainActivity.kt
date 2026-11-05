@@ -44,7 +44,10 @@ class MainActivity : Activity() {
             onSwipe = { dir -> show((index + dir + ids.size) % ids.size, dir) }
             onTouchAny = { resetIdle() }
         }
-        root.addView(pager, FrameLayout.LayoutParams(-1, -1))
+        root.addView(pager, FrameLayout.LayoutParams(-1, -1).apply {
+            // displej hodin kousek obrazu vpravo schová pod rámeček
+            rightMargin = (resources.displayMetrics.widthPixels * 0.035f).toInt()
+        })
         dots = Dots(this) { i -> show(i, if (i > index) 1 else -1) }
         val u = Ui.unit(this)
         root.addView(dots, FrameLayout.LayoutParams(-1, (u * 6).toInt(), Gravity.BOTTOM))

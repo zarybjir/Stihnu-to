@@ -40,6 +40,8 @@ class Settings(ctx: Context) {
         get() = p.getBoolean("voice_wake", false)
         set(v) { p.edit().putBoolean("voice_wake", v).apply() }
     var wakePhrase: String by str("wake_phrase", "prosím Pepo")
+    /** Vstup mikrofonu (MediaRecorder.AudioSource), vybraný testem mikrofonu. */
+    var micSource: Int by int("mic_source", android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION)
 
     /** Jas přes den 1–100 %, 0 = nechat automatiku hodin. */
     var dayBrightness: Int by int("day_brightness", 0)

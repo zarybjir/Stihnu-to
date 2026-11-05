@@ -173,6 +173,9 @@ class AppsPage(ctx: Context) : Page(ctx) {
             "přímo v hodinách, Claudovi jde jen povel. Poprvé stáhne český model (46 MB).", u * 3.8f, Ui.DIM))
         voiceStatus = Ui.text(ctx, cz.stihnuto.panel.VoiceWake.status, u * 3.8f, Ui.ACCENT)
         vCol.addView(voiceStatus)
+        vCol.addView(Ui.button(ctx, if (cz.stihnuto.panel.MicProbe.running) "Testuji…" else "Test mikrofonu", u * 4f) {
+            cz.stihnuto.panel.MicProbe.run(app) { refreshStatuses() }
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
         vRow.addView(vCol, LinearLayout.LayoutParams(0, -2, 1f))
         vRow.addView(Ui.button(ctx, if (vw) "Vypnout" else "Zapnout", u * 4.5f,
             if (vw) Ui.CARD_HI else Ui.ACCENT, if (vw) Ui.TEXT else Ui.BG) {
@@ -467,7 +470,9 @@ class AppsPage(ctx: Context) : Page(ctx) {
     private fun refreshStatuses() {
         val vw = cz.stihnuto.panel.VoiceWake
         val ago = (System.currentTimeMillis() - vw.lastHeardAt) / 1000
-        voiceStatus?.text = vw.status + if (vw.running) {
+        val probe = cz.stihnuto.panel.MicProbe.result
+        voiceStatus?.text = (if (probe.isNotEmpty()) "$probe\n" else "") + vw.status +
+            (if (vw.running) " · hlasitost ${vw.level}" else "") + if (vw.running) {
             if (vw.lastHeardAt == 0L) "\nZatím nic neslyšel — zkus mluvit nahlas u hodin (mikrofon možná drží Google)."
             else "\nNaposledy slyšeno (před $ago s): „${vw.lastHeard}“"
         } else ""
