@@ -35,6 +35,8 @@ class Assistant(private val app: App) {
     private var clientKey = ""
     private val history = mutableListOf<MessageParam>()
     private var lastUse = 0L
+    // Systémový text se v rámci rozhovoru nemění (jinak by se rozbily „thinking" bloky a přišla chyba 400).
+    private var systemCached: String? = null
 
     /** Zeptá se Clauda. Běží v pozadí, výsledek vrátí do [done] (v pozadí). */
     fun ask(text: String, done: (String) -> Unit) {
@@ -57,14 +59,14 @@ class Assistant(private val app: App) {
                 "Claude je momentálně přetížený, zkus to za chvilku."
             } catch (e: AnthropicServiceException) {
                 Log.w("Panel", "claude", e)
-                synchronized(this) { history.clear() }
+                synchronized(this) { resetConversation() }
                 val why = (e.message ?: "").let { m ->
                     Regex("\"message\"\\s*:\\s*\"([^\"]+)").find(m)?.groupValues?.get(1) ?: m
                 }.take(160)
                 "Claude vrátil chybu ${e.statusCode()}. $why"
             } catch (e: Exception) {
                 Log.w("Panel", "claude", e)
-                synchronized(this) { history.clear() }
+                synchronized(this) { resetConversation() }
                 "Nepovedlo se spojit s Claude (${e.message ?: e.javaClass.simpleName})."
             })
         }
@@ -80,13 +82,30 @@ class Assistant(private val app: App) {
             clientKey = key
         }
         // Po pěti minutách ticha začne nový rozhovor.
-        if (System.currentTimeMillis() - lastUse > 5 * 60_000L) history.clear()
+        if (System.currentTimeMillis() - lastUse > 5 * 60_000L) resetConversation()
         lastUse = System.currentTimeMillis()
 
-        history += MessageParam.ofUser(text)
         val model = app.settings.claudeModel.ifBlank { "claude-opus-5-5" }
         // záložní model při odmítnutí umí jen Opus / Sonnet / Fable — Haiku by vrátil chybu 400
         val fallbacks = !model.contains("haiku")
+        history += MessageParam.ofUser(text)
+        return try {
+            conversationTurn(model, fallbacks)
+        } catch (e: AnthropicServiceException) {
+            // 400 bývá neplatný „thinking" blok z minulého kola (vázaný na jiný rozhovor) —
+            // začni čistý rozhovor a zkus dotaz ještě jednou.
+            if (e.statusCode() == 400) {
+                resetConversation()
+                history += MessageParam.ofUser(text)
+                conversationTurn(model, fallbacks)
+            } else throw e
+        }
+    }
+
+    private fun resetConversation() { history.clear(); systemCached = null }
+
+    /** Jedno „kolo": volá model, zpracuje nástroje, vrátí odpověď. */
+    private fun conversationTurn(model: String, fallbacks: Boolean): String {
         repeat(6) {
             val params = MessageCreateParams.builder()
                 .model(model)
@@ -108,7 +127,7 @@ class Assistant(private val app: App) {
 
             val stop = resp.stopReason().orElse(null)
             if (stop == StopReason.REFUSAL) {
-                history.clear()
+                resetConversation()
                 return "Tohle bohužel udělat nemůžu."
             }
             val calls = resp.content().mapNotNull { it.toolUse().orElse(null) }
@@ -232,6 +251,7 @@ class Assistant(private val app: App) {
     }
 
     private fun systemPrompt(): String {
+        systemCached?.let { return it }
         val pages = app.settings.pageList().joinToString { "$it (${Pages.all[it]?.title ?: it})" }
         return """
             Jsi hlasový asistent na chytrých hodinách v domácnosti. Mluv česky.
@@ -249,7 +269,7 @@ class Assistant(private val app: App) {
 
             Přehled:
             ${brief()}
-        """.trimIndent()
+        """.trimIndent().also { systemCached = it }
     }
 
     /** Stručný stav do zadání — většinou ušetří jeden dotaz navíc (rychlejší odpověď). */

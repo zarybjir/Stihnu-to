@@ -1,15 +1,16 @@
 package cz.stihnuto.panel.pages
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import cz.stihnuto.panel.App
 import cz.stihnuto.panel.Ui
@@ -26,11 +27,7 @@ class MusicPage(ctx: Context) : Page(ctx) {
     }
     override val view: View = root
 
-    private val art = ImageView(ctx).apply {
-        scaleType = ImageView.ScaleType.CENTER_CROP
-        background = Ui.rounded(Ui.CARD, u * 3)
-        clipToOutline = true
-    }
+    private val art = ArtView(ctx)
     private val appLabel = Ui.text(ctx, "", u * 4.5f, Ui.DIM)
     private val title = Ui.text(ctx, "", u * 8f, Ui.TEXT, Ui.MEDIUM).apply {
         maxLines = 2; ellipsize = TextUtils.TruncateAt.END
@@ -38,16 +35,17 @@ class MusicPage(ctx: Context) : Page(ctx) {
     private val artist = Ui.text(ctx, "", u * 5.5f, Ui.DIM).apply {
         maxLines = 1; ellipsize = TextUtils.TruncateAt.END
     }
-    private val play = IconButton(ctx, IconButton.PLAY, u * 22) { app.media.command("toggle") }
+    private val play = IconButton(ctx, IconButton.PLAY, u * 20) { app.media.command("toggle") }
     private val volume = Ui.text(ctx, "", u * 5f, Ui.DIM).apply { gravity = Gravity.CENTER }
+    // přehrávací tlačítka (fungují jen s přístupem k přehrávání); hlasitost jde vždy
+    private val transport = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
     private val controls = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
-    private val hint = Ui.text(ctx, "", u * 4.5f, Ui.DIM)
-    private val grant = Ui.button(ctx, "Povolit přístup k přehrávání", u * 5, Ui.ACCENT, Ui.BG) { openListenerSettings() }
+    private val launch = Ui.button(ctx, "Spustit hudbu", u * 5.5f, Ui.PRIMARY, Ui.BG) { open("youtube_music") }
 
     private val onMedia = { update() }
 
     init {
-        val side = (u * 62).toInt()
+        val side = (u * 60).toInt()
         root.addView(art, LinearLayout.LayoutParams(side, side))
 
         val col = LinearLayout(ctx).apply {
@@ -58,90 +56,99 @@ class MusicPage(ctx: Context) : Page(ctx) {
         col.addView(title, lp(top = u * 1.5f))
         col.addView(artist, lp(top = u * 1.5f))
 
-        controls.addView(IconButton(ctx, IconButton.PREV, u * 16) { app.media.command("previous") })
-        controls.addView(play, LinearLayout.LayoutParams(-2, -2).apply {
+        transport.addView(IconButton(ctx, IconButton.PREV, u * 15) { app.media.command("previous") })
+        transport.addView(play, LinearLayout.LayoutParams(-2, -2).apply {
             leftMargin = (u * 3).toInt(); rightMargin = (u * 3).toInt()
         })
-        controls.addView(IconButton(ctx, IconButton.NEXT, u * 16) { app.media.command("next") })
+        transport.addView(IconButton(ctx, IconButton.NEXT, u * 15) { app.media.command("next") })
+        controls.addView(transport)
         controls.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
         controls.addView(Ui.button(ctx, "−", u * 7) { app.media.command("volume_down"); update() },
             LinearLayout.LayoutParams((u * 14).toInt(), (u * 14).toInt()))
         controls.addView(volume, LinearLayout.LayoutParams((u * 16).toInt(), -2))
         controls.addView(Ui.button(ctx, "+", u * 7) { app.media.command("volume_up"); update() },
             LinearLayout.LayoutParams((u * 14).toInt(), (u * 14).toInt()))
-        col.addView(controls, lp(top = u * 5))
-        col.addView(hint, lp(top = u * 3))
-        col.addView(grant, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 3).toInt() })
-
-        val apps = LinearLayout(ctx)
-        apps.addView(Ui.button(ctx, "Hudba", u * 5) { open("youtube_music") })
-        col.addView(apps, lp(top = u * 5))
+        col.addView(controls, lp(top = u * 6))
+        col.addView(launch, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 6).toInt() })
 
         root.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
     }
 
     private fun lp(top: Float) = LinearLayout.LayoutParams(-1, -2).apply { topMargin = top.toInt() }
 
-    /** Otevře systémové nastavení „Přístup k oznámením“ — přes něj Android povolí ovládat hudbu. */
-    private fun openListenerSettings() {
-        val intents = listOf(
-            android.content.Intent("android.settings.NOTIFICATION_LISTENER_DETAIL_SETTINGS")
-                .putExtra("android.provider.extra.NOTIFICATION_LISTENER_COMPONENT_NAME",
-                    android.content.ComponentName(ctx, cz.stihnuto.panel.MediaListener::class.java).flattenToString()),
-            android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
-        )
-        for (i in intents) {
-            try {
-                ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                return
-            } catch (e: Exception) {
-                // zkusí další variantu
-            }
-        }
-        hint.text = "Nastavení oprávnění se na hodinách nedá otevřít. Půjde to přes počítač (adb)."
-    }
-
     private fun open(key: String) {
         if (!app.media.openApp(key)) {
-            hint.text = "Aplikace není nainstalovaná — nainstaluj ji v okně Aplikace (poslední okno)."
             App.instance.showPage("apps")
-            hint.gone(false)
         }
     }
 
     private fun update() {
         val m = app.media
-        if (m.permissionMissing) {
-            title.text = "Chybí oprávnění"
-            artist.text = ""
-            appLabel.text = ""
-            hint.text = "Klepni na tlačítko, v seznamu zapni „Panel“ a vrať se zpět."
-            hint.gone(false)
-            grant.gone(false)
-            controls.gone(true)
-            art.setImageBitmap(null)
-            return
+        val playing = !m.permissionMissing && m.title != null
+        // přehrávací tlačítka a název skladby jen když panel vidí, co hraje
+        transport.gone(m.permissionMissing)
+        title.text = if (playing) m.title else "Hudba"
+        artist.text = when {
+            playing -> m.artist ?: ""
+            else -> "Pusť ji hlasem „prosím, pusť…“ nebo tlačítkem níž."
         }
-        controls.gone(false)
-        grant.gone(true)
-        val t = m.title
-        title.text = t ?: "Nic nehraje"
-        artist.text = m.artist ?: if (t == null) "Spusť YouTube Music tlačítkem dole" else ""
-        appLabel.text = m.appName?.let { "Hraje v: $it" } ?: ""
-        art.setImageBitmap(m.art)
+        appLabel.text = if (playing) m.appName?.let { "Hraje v: $it" } ?: "" else ""
+        art.set(if (playing) m.art else null)
         play.icon = if (m.isPlaying) IconButton.PAUSE else IconButton.PLAY
         volume.text = "${m.volumePercent} %"
-        hint.gone(hint.text.isNullOrEmpty())
     }
 
     override fun onShow() {
-        hint.text = ""
         app.media.attach()
         app.media.listen(onMedia)
     }
 
     override fun onHide() {
         app.media.unlisten(onMedia)
+    }
+
+    /** Obal skladby; když žádný není, nakreslí notu, ať není prázdný čtverec. */
+    class ArtView(ctx: Context) : View(ctx) {
+        private var bmp: Bitmap? = null
+        private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val clip = Path()
+        private val rect = RectF()
+        private val rad = Ui.unit(ctx) * 4
+
+        fun set(b: Bitmap?) { bmp = b; invalidate() }
+
+        override fun onDraw(c: Canvas) {
+            rect.set(0f, 0f, width.toFloat(), height.toFloat())
+            clip.reset(); clip.addRoundRect(rect, rad, rad, Path.Direction.CW)
+            c.clipPath(clip)
+            p.color = Ui.CARD; c.drawRect(rect, p)
+            val b = bmp
+            if (b != null) {
+                val sc = maxOf(width.toFloat() / b.width, height.toFloat() / b.height)
+                val dw = b.width * sc; val dh = b.height * sc
+                c.drawBitmap(b, null, RectF((width - dw) / 2, (height - dh) / 2, (width + dw) / 2, (height + dh) / 2), p)
+                return
+            }
+            // osminová nota uprostřed
+            val s = minOf(width, height).toFloat()
+            p.color = Ui.CARD_HI
+            val rx = s * 0.12f; val ry = s * 0.09f
+            val hx = width * 0.42f; val hy = height * 0.66f
+            val stemX = hx + rx * 0.82f; val stemTop = height * 0.30f
+            p.strokeWidth = s * 0.035f; p.style = Paint.Style.STROKE
+            c.drawLine(stemX, hy, stemX, stemTop, p)
+            p.style = Paint.Style.FILL
+            // praporek
+            c.drawPath(Path().apply {
+                moveTo(stemX, stemTop)
+                quadTo(stemX + s * 0.18f, stemTop + s * 0.06f, stemX + s * 0.10f, stemTop + s * 0.22f)
+                quadTo(stemX + s * 0.14f, stemTop + s * 0.10f, stemX, stemTop + s * 0.10f)
+                close()
+            }, p)
+            c.save(); c.rotate(-20f, hx, hy)
+            c.drawOval(RectF(hx - rx, hy - ry, hx + rx, hy + ry), p)
+            c.restore()
+        }
     }
 
     /** Kulaté tlačítko s nakreslenou ikonou (fonty na hodinách nemusí mít symboly). */
