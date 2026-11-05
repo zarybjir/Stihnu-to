@@ -63,6 +63,8 @@ class AppsPage(ctx: Context) : Page(ctx) {
         ).joinToString(" · ")
         cCol.addView(Ui.text(ctx, if (vals.isNotEmpty()) "$vals — ${m.status}" else m.status, u * 3.8f,
             if (m.fresh) Ui.GOOD else Ui.DIM))
+        if (m.probe.isNotEmpty()) cCol.addView(Ui.text(ctx, "Pokus: ${m.probe}", u * 3.4f, Ui.DIM))
+        if (m.raw.isNotEmpty()) cCol.addView(Ui.text(ctx, "Data: ${m.raw}", u * 3.2f, Ui.DIM).apply { maxLines = 2 })
         cRow.addView(cCol, LinearLayout.LayoutParams(0, -2, 1f))
         cRow.addView(Ui.button(ctx, "Připojit", u * 4.2f) { m.connect(); app.main.postDelayed({ render() }, 800) })
         list.addView(cRow, LinearLayout.LayoutParams(-1, -2))

@@ -60,11 +60,26 @@ class Co2Meter(app: App) : Repo(app) {
         val isMeter = (dev.vendorId == VID && dev.productId == PID) ||
             (dev.vendorId == WCH_VID && dev.productId == WCH_PID)
         if (!isMeter || reader != null) return
-        status = "Měřič připojen, otvírám…"
-        notifyChanged()
-        // přišel přes připojení → panel k němu má přístup i bez systémového okna
-        if (usb.hasPermission(dev)) start(dev) else connect()
+        val t = java.time.LocalTime.now().withNano(0)
+        val perm = usb.hasPermission(dev)
+        // Zkus měřič otevřít rovnou — když panel start přišel přes připojení,
+        // přístup může platit i bez hlášeného povolení. Výsledek si zapiš natvrdo.
+        val conn = try { usb.openDevice(dev) } catch (e: Exception) { null }
+        probe = "$t · připojení předáno panelu, povolení=${if (perm) "ano" else "ne"}, " +
+            "otevření=${if (conn != null) "OK ✓" else "zamítnuto"}"
+        if (conn != null) {
+            conn.close()
+            status = "Měřič připojen, otvírám…"
+            notifyChanged()
+            start(dev)
+        } else {
+            status = "Měřič připojen, ale hodiny ho nepustí (bez povolení USB)"
+            notifyChanged()
+        }
     }
+
+    /** Výsledek posledního pokusu o otevření měřiče (diagnostika na displeji). */
+    @Volatile var probe = ""; private set
 
     fun connect() {
         if (reader != null) return
@@ -77,6 +92,15 @@ class Co2Meter(app: App) : Repo(app) {
             notifyChanged(); return
         }
         if (!usb.hasPermission(dev)) {
+            // nejdřív to zkus otevřít rovnou — některé vestavěné systémy povolení neřeší
+            val conn = try { usb.openDevice(dev) } catch (e: Exception) { null }
+            val t = java.time.LocalTime.now().withNano(0)
+            if (conn != null) {
+                conn.close()
+                probe = "$t · otevření bez povolení OK ✓"
+                start(dev); return
+            }
+            probe = "$t · otevření zamítnuto (bez povolení USB)"
             status = "Povol přístup k USB na displeji" + (dialogInfo.takeIf { it.isNotEmpty() }?.let { " · $it" } ?: "")
             notifyChanged()
             Overlay.service?.watchUsbDialog()
