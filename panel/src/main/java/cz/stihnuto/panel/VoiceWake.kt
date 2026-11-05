@@ -278,10 +278,11 @@ object VoiceWake {
         if (words.isEmpty()) return Regex("$^")
         val parts = words.mapIndexed { i, w -> if (i == words.size - 1 && w.length >= 3) Regex.escape(w.take(1)) + "[a-z]{1,2}" + Regex.escape(w.substring(2, 3)) + "[a-z]*"
             else if (i == words.size - 1) Regex.escape(w) + "[a-z]*" else Regex.escape(w) }
-        return Regex("\\b" + parts.joinToString("\\s+") + "\\b")
+        return Regex("\\b" + parts.joinToString("\\s+(?:[a-z]+\\s+)?") + "\\b")
     }
 
-    private fun partial(app: App, raw: String) {
+    private fun partial(app: App, rawIn: String) {
+        val raw = rawIn.replace("[unk]", " ").replace(Regex("\\s+"), " ").trim()
         if (raw.isNotBlank()) { lastHeard = raw; lastHeardAt = System.currentTimeMillis() }
         if (!awaitingCommand && wakeRegex(app).containsMatchIn(norm(raw))) wake()
     }
@@ -302,7 +303,7 @@ object VoiceWake {
     }
 
     private fun handle(app: App, raw: String) {
-        val text = raw.trim()
+        val text = raw.replace("[unk]", " ").replace(Regex("\\s+"), " ").trim()
         if (text.isNotEmpty()) log("věta: „$text“")
         if (text.isNotEmpty()) { lastHeard = text; lastHeardAt = System.currentTimeMillis() }
         if (awaitingCommand && System.currentTimeMillis() - wakeAt > 10_000) awaitingCommand = false
