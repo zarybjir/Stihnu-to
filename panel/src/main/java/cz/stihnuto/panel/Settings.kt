@@ -23,6 +23,8 @@ class Settings(ctx: Context) {
     var tapoPass: String by str("tapo_pass", "")
     var hubIp: String by str("hub_ip", "10.0.0.139")
     var heatStep: Double by dbl("heat_step", 0.5)
+    /** Scény topení: {"Doma": {"<id hlavice>": 21.0, "*": 21.0}, …}; "*" = výchozí pro ostatní. */
+    var heatScenes: String by str("heat_scenes", "")
 
     /** claude | gemini */
     var aiProvider: String by str("ai_provider", "claude")

@@ -278,6 +278,85 @@ class HeatingRepo(app: App) : Repo(app) {
         }
     }
 
+    // --- scény
+    class Scene(val name: String, val temps: Map<String, Double>, val off: Boolean = false) {
+        fun tempFor(id: String) = temps[id] ?: temps["*"] ?: 20.0
+    }
+
+    fun scenes(): List<Scene> {
+        val saved = try { org.json.JSONObject(app.settings.heatScenes) } catch (e: Exception) { org.json.JSONObject() }
+        fun load(name: String, def: Double): Scene {
+            val o = saved.optJSONObject(name)
+            val m = mutableMapOf("*" to def)
+            o?.keys()?.forEach { k -> m[k] = o.getDouble(k) }
+            return Scene(name, m)
+        }
+        return listOf(load("Doma", 21.0), load("Noc", 18.0), load("Pryč", 16.0), Scene("Vše vypnout", emptyMap(), off = true))
+    }
+
+    /** Průměrná teplota scény přes hlavice, které jsou vidět (pro popisek tlačítka). */
+    fun sceneLabelTemp(s: Scene): Double {
+        val valves = children.filter { it.isValve }
+        if (valves.isEmpty()) return s.temps["*"] ?: 20.0
+        return Math.round(valves.map { s.tempFor(it.id) }.average() * 2) / 2.0
+    }
+
+    /** Scéna, které teď odpovídají všechny hlavice (nebo null). */
+    fun activeScene(): Scene? {
+        val valves = children.filter { it.isValve && it.online }
+        if (valves.isEmpty()) return null
+        return scenes().firstOrNull { s ->
+            valves.all { v -> if (s.off) !v.on else v.on && v.targetTemp != null && Math.abs(v.targetTemp - s.tempFor(v.id)) < 0.26 }
+        }
+    }
+
+    /** Uloží současné cíle hlavic do scény. */
+    fun saveScene(name: String): Boolean {
+        val valves = children.filter { it.isValve && it.on && it.targetTemp != null }
+        if (valves.isEmpty()) return false
+        val all = try { org.json.JSONObject(app.settings.heatScenes) } catch (e: Exception) { org.json.JSONObject() }
+        val o = org.json.JSONObject()
+        valves.forEach { o.put(it.id, it.targetTemp!!) }
+        o.put("*", valves.map { it.targetTemp!! }.average())
+        all.put(name, o)
+        app.settings.heatScenes = all.toString()
+        notifyChanged()
+        return true
+    }
+
+    /** Nastaví všechny hlavice podle scény. */
+    fun applyScene(name: String, done: ((String?) -> Unit)? = null) {
+        val s = scenes().firstOrNull { it.name.equals(name, true) }
+            ?: return done?.invoke("scéna $name neexistuje") ?: Unit
+        val valves = children.filter { it.isValve }
+        // displej hned ukáže nový stav, hlavice se nastaví na pozadí
+        children = children.map { c ->
+            if (!c.isValve) c
+            else if (s.off) TapoChild(c.id, c.name, c.category, c.online, c.currentTemp, c.targetTemp, c.minTemp, c.maxTemp,
+                false, false, c.humidity, c.batteryLow)
+            else c.withTarget(s.tempFor(c.id).coerceIn(c.minTemp, c.maxTemp))
+        }
+        notifyChanged()
+        app.io.execute {
+            val errors = mutableListOf<String>()
+            for (v in valves) {
+                try {
+                    if (s.off) hub().setOn(v.id, false)
+                    else {
+                        if (!v.on) hub().setOn(v.id, true)
+                        hub().setTarget(v.id, s.tempFor(v.id).coerceIn(v.minTemp, v.maxTemp))
+                    }
+                } catch (e: Exception) {
+                    errors += "${v.name}: ${e.message ?: "chyba"}"
+                }
+            }
+            val err = errors.takeIf { it.isNotEmpty() }?.joinToString()
+            if (err != null) error = "Scéna se nenastavila celá: $err"
+            done?.invoke(err)
+            refresh()
+        }
+    }
+
     private fun TapoChild.withTarget(t: Double) = TapoChild(
         id, name, category, online, currentTemp, t, minTemp, maxTemp, true, heating, humidity, batteryLow,
     )

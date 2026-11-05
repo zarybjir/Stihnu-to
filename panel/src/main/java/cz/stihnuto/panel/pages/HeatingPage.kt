@@ -74,7 +74,7 @@ class HeatingPage(ctx: Context) : Page(ctx) {
             list.addView(message("Hub nehlásí žádné hlavice ani teploměry."))
         }
 
-        // hlavice po dvou vedle sebe
+        if (valves.isNotEmpty()) list.addView(scenesRow(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
         // hlavice pod sebou, každá přes celou šířku
         valves.forEach { v ->
             list.addView(valveCard(v), LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
@@ -203,6 +203,33 @@ class HeatingPage(ctx: Context) : Page(ctx) {
         }.apply { background = Ui.rounded(if (v.on) Ui.CARD_HI else Ui.SKY, b / 2f) },
             LinearLayout.LayoutParams((u * 24).toInt(), b).apply { leftMargin = (u * 3).toInt() })
         return card
+    }
+
+    /** Řada scén: klepnutí = nastavit všechny hlavice, podržení = uložit současné nastavení. */
+    private fun scenesRow(): View {
+        val repo = app.heating
+        val active = repo.activeScene()?.name
+        val row = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        repo.scenes().forEachIndexed { i, s ->
+            val on = s.name == active
+            val label = if (s.off) s.name else "${s.name}  ${Ui.num(repo.sceneLabelTemp(s))}°"
+            val b = Ui.button(ctx, label, u * 4.4f, if (on) Ui.SKY else Ui.CARD_HI, if (on) Ui.ON_SKY else Ui.TEXT) {
+                repo.applyScene(s.name)
+            }.apply {
+                background = Ui.rounded(if (on) Ui.SKY else Ui.CARD_HI, u * 4.5f)
+                setPadding((u * 4).toInt(), (u * 1.8f).toInt(), (u * 4).toInt(), (u * 1.8f).toInt())
+                if (!s.off) setOnLongClickListener {
+                    val ok = repo.saveScene(s.name)
+                    android.widget.Toast.makeText(ctx,
+                        if (ok) "Scéna ${s.name} uložena" else "Nejdřív zapni a nastav hlavice", android.widget.Toast.LENGTH_SHORT).show()
+                    true
+                }
+            }
+            row.addView(b, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) leftMargin = (u * 2.5f).toInt() })
+        }
+        row.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
+        row.addView(Ui.text(ctx, "podrž = uložit", u * 3.6f, Ui.DIM))
+        return row
     }
 
     private fun sensorCard(s: TapoChild): View {

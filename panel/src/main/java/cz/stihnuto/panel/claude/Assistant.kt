@@ -248,7 +248,7 @@ class Assistant(private val app: App) {
         val heat = app.heating.children.filter { it.isValve }
         if (heat.isNotEmpty()) out += "Topení: " + heat.joinToString("; ") { c ->
             "${c.name} ${Ui.num(c.currentTemp)} °C" + if (!c.on) " (vypnuto)" else " → cíl ${Ui.num(c.targetTemp)} °C${if (c.heating) ", topí" else ""}"
-        } + "."
+        } + "." + (app.heating.activeScene()?.let { " Scéna: ${it.name}." } ?: "")
         app.calendar.upcoming().take(3).takeIf { it.isNotEmpty() }?.let { ev ->
             out += "Kalendář: " + ev.joinToString("; ") { e ->
                 "${Ui.dayShort(e.start.toLocalDate())} ${if (e.allDay) "celý den" else Ui.time(e.start)} ${e.title}"
@@ -270,6 +270,14 @@ class Assistant(private val app: App) {
             if (app.showPage(page)) "Zobrazeno okno $page." else "Okno $page neexistuje."
         }
         "set_heating" -> setHeating(input)
+        "heating_scene" -> {
+            val name = input["scene"]?.toString() ?: ""
+            val latch = CountDownLatch(1)
+            var err: String? = null
+            app.heating.applyScene(name) { err = it; latch.countDown() }
+            latch.await(30, TimeUnit.SECONDS)
+            err?.let { "Chyba: $it" } ?: "Scéna $name nastavena."
+        }
         "media_control" -> {
             val action = input["action"]?.toString() ?: ""
             val vol = (input["volume_percent"] as? Number)?.toInt()
@@ -420,6 +428,12 @@ class Assistant(private val app: App) {
                         "on" to mapOf("type" to "boolean", "description" to "true = zapnout, false = vypnout (jen ochrana proti mrazu)."),
                     ),
                     listOf("room"),
+                ),
+                tool(
+                    "heating_scene", "Nastaví všechny hlavice podle scény. Doma = běžné teploty, Noc = na spaní, " +
+                        "Pryč = když nikdo není doma (odjezd, dovolená), Vše vypnout = jen ochrana proti mrazu.",
+                    mapOf("scene" to mapOf("type" to "string", "enum" to listOf("Doma", "Noc", "Pryč", "Vše vypnout"))),
+                    listOf("scene"),
                 ),
                 tool(
                     "media_control", "Ovládá právě hrající hudbu/video (YouTube Music apod.).",
