@@ -447,7 +447,7 @@ class MediaRepo(app: App) : Repo(app) {
     fun openApp(key: String, query: String? = null): Boolean {
         val pkgs = when (key) {
             "youtube" -> listOf(APPS.getValue("youtube"), APPS.getValue("newpipe"))
-            "youtube_music" -> listOf(APPS.getValue("youtube_music"), APPS.getValue("simpmusic"))
+            "youtube_music" -> listOf(APPS.getValue("newpipe"))
             else -> listOf(APPS[key] ?: key)
         }
         for (pkg in pkgs) {

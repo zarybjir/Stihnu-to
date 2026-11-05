@@ -321,7 +321,7 @@ class Assistant(private val app: App) {
             if (onMain { cz.stihnuto.panel.YtMusic.open(app, hit.url) } == true) {
                 app.main.postDelayed({ app.showPage("music") }, 4000)
                 "Pouštím: ${hit.title}${if (hit.subtitle.isNotBlank()) " (${hit.subtitle})" else ""}."
-            } else "YouTube Music ani SimpMusic nejsou nainstalované — nainstaluj SimpMusic v okně Aplikace."
+            } else "NewPipe není nainstalovaný — nainstaluj ho v okně Aplikace."
         }
         "open_app" -> {
             val appKey = input["app"]?.toString() ?: ""
@@ -479,7 +479,7 @@ class Assistant(private val app: App) {
                     ),
                 ),
                 tool(
-                    "play_music", "Najde a pustí hudbu na YouTube Music (uživatel má Premium). Použij vždy, když chce pustit konkrétní písničku, interpreta, album nebo playlist.",
+                    "play_music", "Najde hudbu na YouTube Music a pustí ji v přehrávači na hodinách. Použij vždy, když chce pustit konkrétní písničku, interpreta, album nebo playlist.",
                     mapOf(
                         "query" to mapOf("type" to "string", "description" to "Co hledat, např. \"Lucie Medvídek\" nebo \"Kryštof\"."),
                         "kind" to mapOf("type" to "string", "enum" to listOf("song", "album", "playlist", "any"),

@@ -63,7 +63,6 @@ object YtMusic {
             val url = when {
                 kind == "song" && video != null -> "https://music.youtube.com/watch?v=$video"
                 (kind == "playlist" || kind == "album") && list != null -> "https://music.youtube.com/playlist?list=$list"
-                kind == "album" && browse != null -> "https://music.youtube.com/browse/$browse"
                 video != null -> "https://music.youtube.com/watch?v=$video" + (list?.let { "&list=$it" } ?: "")
                 list != null -> "https://music.youtube.com/playlist?list=$list"
                 else -> null
@@ -73,17 +72,26 @@ object YtMusic {
         return hit
     }
 
-    /** Otevře odkaz v aplikaci YouTube Music (nebo SimpMusic). */
+    /**
+     * Pustí odkaz v NewPipe (lehčí než YouTube Music na hodinách).
+     * Odkaz z music.youtube.com se převede na youtube.com; u skladby se přidá
+     * mix (RD…), aby po ní hrály podobné.
+     */
     fun open(app: App, url: String): Boolean {
-        val pkgs = listOf(MediaRepo.APPS.getValue("youtube_music"), MediaRepo.APPS.getValue("simpmusic"))
-        for (pkg in pkgs) {
-            if (Updater.installedVersion(app, pkg) == null) continue
-            val i = Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (i.resolveActivity(app.packageManager) != null) {
-                app.startActivity(i); return true
-            }
+        val pkg = MediaRepo.APPS.getValue("newpipe")
+        if (Updater.installedVersion(app, pkg) == null) return false
+        val u = Uri.parse(url)
+        val video = u.getQueryParameter("v")
+        val list = u.getQueryParameter("list")
+        val yt = when {
+            video != null -> "https://www.youtube.com/watch?v=$video&list=${list ?: "RD$video"}"
+            list != null -> "https://www.youtube.com/playlist?list=$list"
+            else -> url.replace("music.youtube.com", "www.youtube.com")
         }
-        return false
+        val i = Intent(Intent.ACTION_VIEW, Uri.parse(yt)).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (i.resolveActivity(app.packageManager) == null) return false
+        app.startActivity(i)
+        return true
     }
 
     private fun walk(v: Any?, f: (JSONObject) -> Unit) {

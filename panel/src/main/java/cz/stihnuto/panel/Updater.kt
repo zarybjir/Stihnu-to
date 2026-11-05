@@ -33,11 +33,7 @@ object Updater {
                 "cz.stihnuto.panel",
             ) { URL },
             Installable(
-                "simpmusic", "SimpMusic", "YouTube Music bez reklam (open source).",
-                "com.maxrave.simpmusic",
-            ) { githubApk("maxrave-dev/SimpMusic", prefer = listOf("foss")) },
-            Installable(
-                "newpipe", "NewPipe", "Videa z YouTube bez reklam (open source).",
+                "newpipe", "NewPipe", "Hudba a videa z YouTube bez reklam (open source) — přes něj hraje hudba.",
                 "org.schabi.newpipe",
             ) { githubApk("TeamNewPipe/NewPipe") },
             Installable(

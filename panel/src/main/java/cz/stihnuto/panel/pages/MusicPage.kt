@@ -74,7 +74,7 @@ class MusicPage(ctx: Context) : Page(ctx) {
         col.addView(grant, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 3).toInt() })
 
         val apps = LinearLayout(ctx)
-        apps.addView(Ui.button(ctx, "YouTube Music", u * 5) { open("youtube_music") })
+        apps.addView(Ui.button(ctx, "NewPipe", u * 5) { open("youtube_music") })
         apps.addView(Ui.button(ctx, "YouTube", u * 5) { open("youtube") },
             LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 3).toInt() })
         col.addView(apps, lp(top = u * 5))
