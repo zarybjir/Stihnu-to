@@ -53,7 +53,7 @@ class Assistant(private val app: App) {
             } catch (e: UnauthorizedException) {
                 "Klíč k Claude API nefunguje. Zkontroluj ho v nastavení."
             } catch (e: RateLimitException) {
-                "Claude je teď přetížený, zkus to za chvilku."
+                "Claude je momentálně přetížený, zkus to za chvilku."
             } catch (e: AnthropicServiceException) {
                 Log.w("Panel", "claude", e)
                 "Claude vrátil chybu ${e.statusCode()}."

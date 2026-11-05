@@ -102,7 +102,7 @@ class CalendarPage(ctx: Context) : Page(ctx) {
             LinearLayout.LayoutParams((u * 1.2f).toInt(), (u * 8).toInt()))
         val time = when {
             e.allDay -> "celý den"
-            running -> "teď · do ${Ui.time(e.end)}"
+            running -> "probíhá · do ${Ui.time(e.end)}"
             else -> "${Ui.time(e.start)} – ${Ui.time(e.end)}"
         }
         row.addView(Ui.text(ctx, time, u * 4.2f, Ui.DIM, Ui.MEDIUM),

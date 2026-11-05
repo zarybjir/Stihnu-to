@@ -69,15 +69,9 @@ class HeatingPage(ctx: Context) : Page(ctx) {
         }
 
         // hlavice po dvou vedle sebe
-        valves.chunked(2).forEach { pair ->
-            val row = LinearLayout(ctx)
-            pair.forEachIndexed { i, v ->
-                row.addView(valveCard(v), LinearLayout.LayoutParams(0, -2, 1f).apply {
-                    if (i == 1) leftMargin = (u * 3).toInt()
-                })
-            }
-            if (pair.size == 1) row.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = (u * 3).toInt() })
-            list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
+        // hlavice pod sebou, každá přes celou šířku
+        valves.forEach { v ->
+            list.addView(valveCard(v), LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
         }
 
         if (sensors.isNotEmpty()) {
@@ -138,46 +132,53 @@ class HeatingPage(ctx: Context) : Page(ctx) {
         return col
     }
 
+    /** Podélná dlaždice hlavice: vlevo název a teplota, vpravo − cíl + a Zapnout/Vypnout. */
     private fun valveCard(v: TapoChild): View {
+        val hot = v.heating && v.on
         val card = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            background = Ui.rounded(if (v.heating && v.on) 0xFF2A1F1A.toInt() else Ui.CARD, u * 3,
-                if (v.heating && v.on) (u * 0.5f).toInt() else 0, Ui.HEAT)
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(if (hot) Ui.SKY_BG else Ui.CARD, u * 4, if (hot) (u * 0.6f).toInt() else 0, Ui.SKY)
             setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 4).toInt(), (u * 3).toInt())
             alpha = if (v.online) 1f else 0.5f
         }
-        val top = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
-        top.addView(Ui.text(ctx, v.name, u * 5.5f, Ui.TEXT, Ui.MEDIUM).apply { maxLines = 1 },
-            LinearLayout.LayoutParams(0, -2, 1f))
+        val left = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        left.addView(Ui.text(ctx, v.name.replaceFirstChar { it.uppercase() }, u * 6f, Ui.TEXT, Ui.MEDIUM).apply { maxLines = 1 })
+        val sub = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        sub.addView(Ui.text(ctx, "Aktuálně ${Ui.num(v.currentTemp)} °C", u * 4.2f, Ui.DIM))
         val state = when {
             !v.online -> "offline"
             !v.on -> "vypnuto"
             v.heating -> "topí"
             else -> ""
         }
-        if (v.batteryLow) top.addView(Ui.text(ctx, "baterie ", u * 3.8f, Ui.HEAT))
-        top.addView(Ui.text(ctx, state, u * 4.2f, if (v.heating) Ui.HEAT else Ui.DIM, Ui.MEDIUM))
-        card.addView(top)
+        if (state.isNotEmpty()) sub.addView(Ui.text(ctx, state, u * 4.2f, if (hot) Ui.ON_SKY else Ui.DIM, Ui.MEDIUM).apply {
+            if (hot) {
+                background = Ui.rounded(Ui.SKY, u * 3)
+                setPadding((u * 2.5f).toInt(), (u * 0.6f).toInt(), (u * 2.5f).toInt(), (u * 0.8f).toInt())
+            }
+        }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 3).toInt() })
+        if (v.batteryLow) sub.addView(Ui.text(ctx, "slabá baterie", u * 3.8f, Ui.HEAT),
+            LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 3).toInt() })
+        left.addView(sub, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1).toInt() })
+        card.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
 
-        card.addView(Ui.text(ctx, "teď ${Ui.num(v.currentTemp)} °C", u * 4.5f, Ui.DIM),
-            LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1).toInt() })
-
-        val ctl = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
-        val b = (u * 15).toInt()
-        ctl.addView(Ui.button(ctx, "−", u * 8) { app.heating.nudgeTarget(v.id, -app.settings.heatStep) },
-            LinearLayout.LayoutParams(b, b))
-        ctl.addView(Ui.text(ctx, if (v.on) "${Ui.num(v.targetTemp)}°" else "–", u * 10, Ui.TEXT, Ui.LIGHT).apply {
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        ctl.addView(Ui.button(ctx, "+", u * 8) { app.heating.nudgeTarget(v.id, app.settings.heatStep) },
-            LinearLayout.LayoutParams(b, b))
-        card.addView(ctl, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
-
-        val toggle = Ui.button(ctx, if (v.on) "Vypnout" else "Zapnout", u * 4f,
-            if (v.on) Ui.CARD_HI else Ui.HEAT, if (v.on) Ui.DIM else Ui.BG) {
-            app.heating.setOn(v.id, !v.on)
+        val b = (u * 14).toInt()
+        fun round(label: String, bg: Int, fg: Int, onTap: () -> Unit) = Ui.button(ctx, label, u * 7, bg, fg, onTap).apply {
+            background = Ui.rounded(bg, b / 2f)
+            setPadding(0, 0, 0, 0)
         }
-        card.addView(toggle, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
+        card.addView(round("−", Ui.CARD_HI, Ui.TEXT) { app.heating.nudgeTarget(v.id, -app.settings.heatStep) },
+            LinearLayout.LayoutParams(b, b))
+        card.addView(Ui.text(ctx, if (v.on) "${Ui.num(v.targetTemp)}°" else "–", u * 10, if (v.on) Ui.TEXT else Ui.DIM, Ui.REGULAR)
+            .apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams((u * 30).toInt(), -2))
+        card.addView(round("+", if (hot) Ui.SKY else Ui.CARD_HI, if (hot) Ui.ON_SKY else Ui.TEXT) {
+            app.heating.nudgeTarget(v.id, app.settings.heatStep)
+        }, LinearLayout.LayoutParams(b, b))
+        card.addView(Ui.button(ctx, if (v.on) "Vypnout" else "Zapnout", u * 4.5f,
+            if (v.on) Ui.CARD_HI else Ui.SKY, if (v.on) Ui.TEXT else Ui.ON_SKY) {
+            app.heating.setOn(v.id, !v.on)
+        }.apply { background = Ui.rounded(if (v.on) Ui.CARD_HI else Ui.SKY, b / 2f) },
+            LinearLayout.LayoutParams((u * 24).toInt(), b).apply { leftMargin = (u * 3).toInt() })
         return card
     }
 

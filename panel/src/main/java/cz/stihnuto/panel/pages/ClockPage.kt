@@ -103,7 +103,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
                     today.plusDays(1) -> "zítra "
                     else -> "${Ui.dayShort(next.start.toLocalDate())} "
                 }
-                val time = if (next.allDay) "celý den" else if (next.start.isBefore(now)) "teď" else Ui.time(next.start)
+                val time = if (next.allDay) "celý den" else if (next.start.isBefore(now)) "probíhá" else Ui.time(next.start)
                 chip.textSize = h * 0.045f
                 var t = "$day$time · ${next.title}"
                 while (chip.measureText(t) > (leftR - leftL) * 0.85f && t.length > 4) t = t.dropLast(2) + "…"
@@ -165,7 +165,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 }
                 hourLabel.textSize = h * 0.042f
                 hourLabel.color = if (i == 0) Ui.TEXT else Ui.DIM
-                c.drawText(if (i == 0) "teď" else "${hr.time.hour}", r0 + h * 0.028f, m + h * 0.015f, hourLabel)
+                c.drawText(if (i == 0) "nyní" else "${hr.time.hour}", r0 + h * 0.028f, m + h * 0.015f, hourLabel)
                 WeatherIcon.draw(c, hr.code, hr.isDay, r0 + h * 0.135f, m, h * 0.062f)
                 temp.textSize = h * 0.048f
                 c.drawText(Ui.deg(hr.temp), r0 + h * 0.26f, m + h * 0.017f, temp)

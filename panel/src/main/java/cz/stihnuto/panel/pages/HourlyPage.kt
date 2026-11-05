@@ -143,7 +143,7 @@ class HourlyPage(ctx: Context) : Page(ctx) {
                 fill.color = Ui.ACCENT
                 c.drawCircle(x(i), ty(hr.temp), h * 0.012f, fill)
                 small.textSize = h * 0.045f
-                c.drawText(if (i == 0) "teď" else "${hr.time.hour}", x(i), hourY, small)
+                c.drawText(if (i == 0) "nyní" else "${hr.time.hour}", x(i), hourY, small)
                 if (hr.precipProb >= 10) {
                     rain.textSize = h * 0.036f
                     c.drawText("${hr.precipProb} %", x(i), rTop - h * 0.01f, rain)
