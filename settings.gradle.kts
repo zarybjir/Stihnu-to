@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 rootProject.name = "StihnuTo"
 include(":app")
 include(":panel")
+include(":kuchapka")

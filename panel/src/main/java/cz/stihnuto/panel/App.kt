@@ -34,6 +34,7 @@ class App : Application() {
     lateinit var calendar: CalendarRepo
     lateinit var radar: RadarRepo
     lateinit var co2: Co2Meter
+    lateinit var shopping: Shopping
     private var server: WebServer? = null
 
     /** Nastaví MainActivity — přepne okno. */
@@ -50,6 +51,7 @@ class App : Application() {
         calendar = CalendarRepo(this)
         radar = RadarRepo(this)
         co2 = Co2Meter(this)
+        shopping = Shopping(this)
         Overlay.startWatchdog(this)
         main.postDelayed({ VoiceWake.start(this) }, 15_000)
         server = WebServer(this, 8080).also { it.start() }

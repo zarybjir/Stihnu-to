@@ -270,6 +270,19 @@ class Assistant(private val app: App) {
             if (app.showPage(page)) "Zobrazeno okno $page." else "Okno $page neexistuje."
         }
         "set_heating" -> setHeating(input)
+        "add_shopping" -> {
+            val raw = input["items"]
+            val list = when (raw) {
+                is List<*> -> raw.mapNotNull { it?.toString() }
+                is JSONArray -> (0 until raw.length()).map { raw.optString(it) }
+                is String -> raw.split(',', ';', '\n')
+                else -> emptyList()
+            }.map { it.trim() }.filter { it.isNotEmpty() }
+            if (list.isEmpty()) "Nevím, co přidat." else {
+                app.shopping.add(list)
+                "Přidáno do nákupu v Kuchapce: ${list.joinToString()}."
+            }
+        }
         "heating_scene" -> {
             val name = input["scene"]?.toString() ?: ""
             val latch = CountDownLatch(1)
@@ -428,6 +441,13 @@ class Assistant(private val app: App) {
                         "on" to mapOf("type" to "boolean", "description" to "true = zapnout, false = vypnout (jen ochrana proti mrazu)."),
                     ),
                     listOf("room"),
+                ),
+                tool(
+                    "add_shopping", "Přidá položky na nákupní seznam v mobilní aplikaci Kuchapka. Každá položka zvlášť, " +
+                        "množství na začátek, např. [\"2 kg brambory\", \"mléko\", \"6 ks vejce\"].",
+                    mapOf("items" to mapOf("type" to "array", "items" to mapOf("type" to "string"),
+                        "description" to "Položky v češtině, v 1. pádě.")),
+                    listOf("items"),
                 ),
                 tool(
                     "heating_scene", "Nastaví všechny hlavice podle scény. Doma = běžné teploty, Noc = na spaní, " +

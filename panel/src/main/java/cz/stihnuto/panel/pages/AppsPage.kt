@@ -68,6 +68,10 @@ class AppsPage(ctx: Context) : Page(ctx) {
         list.addView(cRow, LinearLayout.LayoutParams(-1, -2))
         list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
 
+        // nákup do Kuchapky v mobilu
+        list.addView(shoppingBox())
+        list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
+
         // poslat klíč / kalendář z mobilu přes QR kód
         list.addView(phoneBox())
         list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
@@ -310,6 +314,32 @@ class AppsPage(ctx: Context) : Page(ctx) {
     }
 
     private var qrBitmap: android.graphics.Bitmap? = null
+
+    /** Kód pro spárování s Kuchapkou a co čeká na převzetí. */
+    private fun shoppingBox(): View {
+        val s = app.shopping
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+        }
+        val top = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        top.addView(Ui.text(ctx, "Nákup do Kuchapky", u * 5.5f, Ui.TEXT, Ui.MEDIUM), LinearLayout.LayoutParams(0, -2, 1f))
+        if (s.items.any { it.taken }) top.addView(Ui.button(ctx, "Smazat převzaté", u * 4f) { s.clearTaken(); render() })
+        box.addView(top)
+        box.addView(Ui.text(ctx, "V Kuchapce: Nákup → Propojit s hodinami → opiš kód. Pak stačí říct " +
+            "„Pepo, přidej mléko a chleba“.", u * 3.8f, Ui.DIM),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1).toInt() })
+        box.addView(Ui.text(ctx, s.codePretty, u * 8f, Ui.PRIMARY, Ui.MEDIUM).apply { letterSpacing = 0.08f },
+            LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
+        if (s.items.isNotEmpty()) {
+            val waiting = s.items.filter { !it.taken }.joinToString { it.text }
+            val taken = s.items.filter { it.taken }.joinToString { it.text }
+            if (waiting.isNotEmpty()) box.addView(Ui.text(ctx, "Čeká na mobil: $waiting", u * 4f, Ui.ACCENT))
+            if (taken.isNotEmpty()) box.addView(Ui.text(ctx, "Převzato ✓ $taken", u * 4f, Ui.GOOD))
+        }
+        return box
+    }
 
     private fun phoneBox(): View {
         val box = LinearLayout(ctx).apply {

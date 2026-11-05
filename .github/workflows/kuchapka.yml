@@ -1,0 +1,88 @@
+# Sestaví Android aplikaci Kuchapka (web ze zarybjir/Kuchapka zabalený do aplikace).
+# Ke stažení: https://github.com/<repo>/releases/download/kuchapka-latest/kuchapka.apk
+name: Build Kuchapka APK
+
+on:
+  push:
+    paths:
+      - "kuchapka/**"
+      - ".github/workflows/kuchapka.yml"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Větev Kuchapky (prázdné = ccr-63ee96b3-7bf2sa, jinak main)"
+        required: false
+
+concurrency:
+  group: kuchapka-build
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kuchapka web
+        run: |
+          ref="${{ github.event.inputs.ref }}"
+          if [ -z "$ref" ]; then
+            if git ls-remote --exit-code --heads https://github.com/zarybjir/Kuchapka ccr-63ee96b3-7bf2sa >/dev/null; then ref=ccr-63ee96b3-7bf2sa; else ref=main; fi
+          fi
+          git clone --depth 1 --branch "$ref" https://github.com/zarybjir/Kuchapka "$RUNNER_TEMP/kuchapka"
+          echo "KUCHAPKA_SRC=$RUNNER_TEMP/kuchapka" >> "$GITHUB_ENV"
+          echo "Kuchapka: $ref $(git -C "$RUNNER_TEMP/kuchapka" rev-parse --short HEAD) ($(grep -o 'build [0-9]*' "$RUNNER_TEMP/kuchapka/index.html" | head -1))"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Keystore
+        env:
+          KS_B64: ${{ secrets.PANEL_KEYSTORE_B64 }}
+        if: env.KS_B64 != ''
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/panel.keystore"
+          echo "PANEL_KEYSTORE=$RUNNER_TEMP/panel.keystore" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          PANEL_KEYSTORE_PASSWORD: ${{ secrets.PANEL_KEYSTORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          set +e
+          ./gradlew --no-daemon --console=plain :kuchapka:assembleDebug > build.log 2>&1
+          rc=$?
+          set -e
+          cat build.log
+          if [ $rc -ne 0 ]; then
+            msg=$(grep -E "^e: |error:|What went wrong|Could not|> |FAILURE|Caused by" build.log | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Gradle build failed::${msg}"
+            exit $rc
+          fi
+
+      - name: Publish
+        run: |
+          head=$(git ls-remote origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)
+          if [ -n "$head" ] && [ "$head" != "$GITHUB_SHA" ]; then
+            echo "Na větvi je novější commit ($head), vydání přeskakuji."
+            exit 0
+          fi
+          cp kuchapka/build/outputs/apk/debug/kuchapka-debug.apk kuchapka.apk
+          code=$(grep -o 'versionCode = [0-9]*' kuchapka/build.gradle.kts | grep -o '[0-9]*')
+          echo "versionCode=$code" > version.txt
+          gh release list --limit 50 --json tagName,name \
+            --jq '.[] | select(.name | startswith("Kuchapka")) | .tagName' |
+            while read -r t; do gh release delete "$t" --yes || true; done
+          git push -f origin "$GITHUB_SHA:refs/tags/kuchapka-latest"
+          gh release create kuchapka-latest kuchapka.apk version.txt --prerelease --verify-tag \
+            --title "Kuchapka pro Android (nejnovější)" \
+            --notes "Automaticky sestaveno z $GITHUB_SHA."
+        env:
+          GH_TOKEN: ${{ github.token }}
