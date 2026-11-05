@@ -1,11 +1,9 @@
 package cz.kuchapka.app
 
-import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -71,10 +69,6 @@ class MainActivity : Activity() {
         }
         if (savedInstanceState == null) web.loadUrl(START) else web.restoreState(savedInstanceState)
 
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
-        PollJob.schedule(this)
         checkUpdate()
     }
 
@@ -86,7 +80,6 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         web.onResume()
-        PollJob.clearNotification(this)
         web.evaluateJavascript("typeof pollHodiny==='function'&&pollHodiny()", null)
     }
 

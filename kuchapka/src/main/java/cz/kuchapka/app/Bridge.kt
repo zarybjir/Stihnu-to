@@ -10,12 +10,9 @@ import java.io.File
 
 /** Co web Kuchapky v aplikaci volá přes window.KuchapkaAndroid. */
 class Bridge(private val act: MainActivity) {
-    /** Schránka hodin (ntfy) — aby aplikace hlídala nové položky i na pozadí. */
+    /** Schránka hodin — položky si web vyzvedává sám při otevření aplikace. */
     @JavascriptInterface
-    fun setTopic(topic: String) {
-        PollJob.prefs(act).edit().putString("topic", topic).apply()
-        PollJob.schedule(act)
-    }
+    fun setTopic(topic: String) {}
 
     @JavascriptInterface
     fun keepScreenOn(on: Boolean) = act.keepScreenOn(on)
