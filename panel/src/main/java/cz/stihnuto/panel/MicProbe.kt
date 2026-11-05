@@ -20,6 +20,12 @@ object MicProbe {
         MediaRecorder.AudioSource.DEFAULT,
     )
 
+    /** Další vstup v pořadí (pro ruční zkoušení). */
+    fun nextSource(src: Int): Int {
+        val i = sources.indexOf(src)
+        return sources[(i + 1).mod(sources.size)]
+    }
+
     fun name(src: Int) = when (src) {
         MediaRecorder.AudioSource.VOICE_RECOGNITION -> "rozpoznávání"
         MediaRecorder.AudioSource.MIC -> "mikrofon"

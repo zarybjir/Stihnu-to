@@ -156,10 +156,10 @@ object VoiceWake {
         var s = 0.0
         for (i in 0 until n) s += buf[i].toDouble() * buf[i]
         val rms = Math.sqrt(s / n)
-        speech = rms > maxOf(noise * 2.5, 40.0)
+        speech = rms > maxOf(noise * 2.0, 30.0)
         if (speech) {
-            // řeč dorovnat zhruba na 3000 (mikrofon hodin je velmi tichý: řeč ~120, ticho ~20)
-            val target = (3000.0 / rms).coerceIn(1.0, 40.0)
+            // řeč dorovnat zhruba na 2200 (mírněji, ať se nepřebudí a nerozpadne pro rozpoznání)
+            val target = (2200.0 / rms).coerceIn(1.0, 18.0)
             gain = gain * 0.7 + target * 0.3
         } else {
             noise = noise * 0.95 + rms * 0.05

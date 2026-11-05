@@ -180,9 +180,17 @@ class AppsPage(ctx: Context) : Page(ctx) {
         vCol.addView(modes, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
         voiceStatus = Ui.text(ctx, cz.stihnuto.panel.VoiceWake.status, u * 3.8f, Ui.ACCENT)
         vCol.addView(voiceStatus)
-        vCol.addView(Ui.button(ctx, if (cz.stihnuto.panel.MicProbe.running) "Testuji…" else "Test mikrofonu", u * 4f) {
+        val micRow = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        micRow.addView(Ui.button(ctx, if (cz.stihnuto.panel.MicProbe.running) "Testuji…" else "Test mikrofonu", u * 4f) {
             cz.stihnuto.panel.MicProbe.run(app) { refreshStatuses() }
-        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
+        })
+        micRow.addView(Ui.button(ctx, "Jiný vstup (${cz.stihnuto.panel.MicProbe.name(app.settings.micSource)})", u * 4f) {
+            app.settings.micSource = cz.stihnuto.panel.MicProbe.nextSource(app.settings.micSource)
+            if (app.settings.voiceWake) { cz.stihnuto.panel.VoiceWake.stop(); app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.start(app) }, 600) }
+            render()
+        }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 2).toInt() })
+        vCol.addView(micRow, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
+        vCol.addView(Ui.text(ctx, "Když to přes hudbu nebo potichu neslyší, zkus jiný vstup a pak řekni krátkou větu.", u * 3.4f, Ui.DIM))
         vRow.addView(vCol, LinearLayout.LayoutParams(0, -2, 1f))
         vRow.addView(Ui.button(ctx, if (vw) "Vypnout" else "Zapnout", u * 4.5f,
             if (vw) Ui.CARD_HI else Ui.ACCENT, if (vw) Ui.TEXT else Ui.BG) {
