@@ -40,7 +40,7 @@ class MusicPage(ctx: Context) : Page(ctx) {
     // přehrávací tlačítka (fungují jen s přístupem k přehrávání); hlasitost jde vždy
     private val transport = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
     private val controls = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
-    private val launch = Ui.button(ctx, "Spustit hudbu", u * 5.5f, Ui.PRIMARY, Ui.BG) { open("youtube_music") }
+    private val launch = Ui.button(ctx, "Otevřít přehrávač", u * 5.5f, Ui.PRIMARY, Ui.BG) { open("youtube_music") }
 
     private val onMedia = { update() }
 
