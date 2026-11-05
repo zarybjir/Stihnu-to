@@ -83,6 +83,8 @@ object VoiceWake {
                 for (i in 0 until n) sum += buf[i].toDouble() * buf[i]
                 count += n
                 if (count >= 8000) { level = Math.sqrt(sum / count).toInt(); sum = 0.0; count = 0 }
+                amplify(buf, n)
+                capture?.let { if (it.feed(buf, n)) { capture = null; it.finish() } }
                 if (paused) continue
                 if (recognizer.acceptWaveForm(buf, n)) {
                     handle(app, JSONObject(recognizer.result).optString("text"))
@@ -98,6 +100,74 @@ object VoiceWake {
         } finally {
             try { rec?.stop(); rec?.release() } catch (_: Exception) {}
         }
+    }
+
+    // --- A) automatické zesílení: tichý mikrofon hodin → úroveň, se kterou rozpoznávání pracuje
+    private var gain = 4.0
+
+    private fun amplify(buf: ShortArray, n: Int) {
+        var s = 0.0
+        for (i in 0 until n) s += buf[i].toDouble() * buf[i]
+        val rms = Math.sqrt(s / n)
+        if (rms > 60) { // pravděpodobně řeč — dorovnat ji zhruba na 3000
+            val target = (3000.0 / rms).coerceIn(1.0, 12.0)
+            gain = gain * 0.8 + target * 0.2
+        }
+        for (i in 0 until n) buf[i] = (buf[i] * gain).toInt().coerceIn(-32768, 32767).toShort()
+    }
+
+    // --- B) nahrání jedné věty (klepnutí na mikrofon) — konec po krátké pauze
+    private class Capture(val done: (ShortArray?) -> Unit) {
+        val out = java.io.ByteArrayOutputStream()
+        var started = false
+        var quietMs = 0
+        var totalMs = 0
+        fun feed(buf: ShortArray, n: Int): Boolean {
+            var s = 0.0
+            for (i in 0 until n) s += buf[i].toDouble() * buf[i]
+            val loud = Math.sqrt(s / n) > 900 // po zesílení
+            val bb = java.nio.ByteBuffer.allocate(n * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            for (i in 0 until n) bb.putShort(buf[i])
+            out.write(bb.array())
+            val ms = n * 1000 / 16000
+            totalMs += ms
+            if (loud) { started = true; quietMs = 0 } else quietMs += ms
+            return (started && quietMs > 1200) || totalMs > 9000 || (!started && totalMs > 5000)
+        }
+        fun finish() {
+            val bytes = out.toByteArray()
+            done(if (started) java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                .let { sb -> ShortArray(sb.remaining()).also { sb.get(it) } } else null)
+        }
+    }
+    @Volatile private var capture: Capture? = null
+
+    /** Nahraje jednu větu z mikrofonu (i když hlasová aktivace neběží). null = nic neřekl. */
+    fun recordUtterance(app: App, done: (ShortArray?) -> Unit) {
+        val c = Capture(done)
+        if (worker != null) { capture = c; return }
+        Thread({
+            var rec: AudioRecord? = null
+            try {
+                val min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+                rec = AudioRecord(app.settings.micSource, 16000, AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 16000))
+                rec.startRecording()
+                val buf = ShortArray(1600)
+                while (true) {
+                    val n = rec.read(buf, 0, buf.size)
+                    if (n <= 0) continue
+                    amplify(buf, n)
+                    if (c.feed(buf, n)) break
+                }
+                c.finish()
+            } catch (e: Exception) {
+                Log.w("Panel", "record", e)
+                done(null)
+            } finally {
+                try { rec?.stop(); rec?.release() } catch (_: Exception) {}
+            }
+        }, "record").apply { isDaemon = true; start() }
     }
 
     fun stop() {

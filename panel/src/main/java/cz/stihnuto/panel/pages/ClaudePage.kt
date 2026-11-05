@@ -87,12 +87,31 @@ class ClaudePage(ctx: Context) : Page(ctx) {
     private fun idle() {
         val noKey = if (app.settings.aiProvider == "gemini") app.settings.geminiKey.isBlank() else app.settings.anthropicKey.isBlank()
         status.text = if (noKey) "Nejdřív vlož klíč (Claude nebo Gemini) v nastavení"
-        else if (SpeechRecognizer.isRecognitionAvailable(ctx) || cz.stihnuto.panel.VoiceWake.running) "Klepni a mluv, nebo řekni „prosím Pepo“"
+        else if (cz.stihnuto.panel.Transcribe.available(app) || SpeechRecognizer.isRecognitionAvailable(ctx) || cz.stihnuto.panel.VoiceWake.running) "Klepni a mluv, nebo řekni „prosím Pepo“"
         else "Zapni hlasovou aktivaci v okně Aplikace — pak půjde mluvit"
         mic.active = false
     }
 
     private fun listen() {
+        // Nejspolehlivější: nahrát větu a nechat ji přepsat Gemini (rozumí česky výborně)
+        if (cz.stihnuto.panel.Transcribe.available(app)) {
+            tts?.stop()
+            cz.stihnuto.panel.VoiceWake.pause(true)
+            mic.active = true
+            status.text = "Poslouchám…"
+            you.text = ""
+            cz.stihnuto.panel.VoiceWake.recordUtterance(app) { pcm ->
+                app.main.post { mic.active = false; status.text = if (pcm == null) "Nic jsem neslyšel" else "Přepisuji…" }
+                if (pcm == null) { cz.stihnuto.panel.VoiceWake.pause(false); return@recordUtterance }
+                app.io.execute {
+                    val text = try { cz.stihnuto.panel.Transcribe.text(app, pcm) } catch (e: Exception) { "" .also {
+                        app.main.post { status.text = e.message ?: "Přepis selhal" } } }
+                    cz.stihnuto.panel.VoiceWake.pause(false)
+                    app.main.post { if (text.isNotBlank()) ask(text) else if (status.text == "Přepisuji…") status.text = "Nerozuměl jsem, zkus to znovu" }
+                }
+            }
+            return
+        }
         if (!SpeechRecognizer.isRecognitionAvailable(ctx) && cz.stihnuto.panel.VoiceWake.captureCommand()) {
             return // Vosk: onWake ukáže „Poslouchám…“, povel přijde přes onCommand
         }
