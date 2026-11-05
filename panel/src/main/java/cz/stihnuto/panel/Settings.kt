@@ -21,7 +21,7 @@ class Settings(ctx: Context) {
 
     var tapoUser: String by str("tapo_user", "")
     var tapoPass: String by str("tapo_pass", "")
-    var hubIp: String by str("hub_ip", "")
+    var hubIp: String by str("hub_ip", "10.0.0.139")
     var heatStep: Double by dbl("heat_step", 0.5)
 
     /** claude | gemini */

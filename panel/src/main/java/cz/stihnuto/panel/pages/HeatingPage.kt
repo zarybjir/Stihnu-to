@@ -32,18 +32,28 @@ class HeatingPage(ctx: Context) : Page(ctx) {
         app.heating.unlisten(onChange)
     }
 
+    private var form: View? = null
+
     private fun render() {
         val repo = app.heating
+        // během psaní do formuláře nepřekreslovat (smazalo by se, co je napsané)
+        if ((showForm || !repo.configured) && form?.parent == list) return
+        form = null
         list.removeAllViews()
 
         val header = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
         header.addView(Ui.text(ctx, "Topení", u * 7, Ui.TEXT, Ui.MEDIUM), LinearLayout.LayoutParams(0, -2, 1f))
+        if (repo.configured) header.addView(Ui.button(ctx, "Přihlášení", u * 4.2f) {
+            showForm = !showForm
+            if (!showForm) { list.removeView(form); form = null }
+            render()
+        },
+            LinearLayout.LayoutParams(-2, -2).apply { rightMargin = (u * 2).toInt() })
         header.addView(Ui.button(ctx, "Obnovit", u * 4.2f) { repo.refresh() })
         list.addView(header)
 
-        if (!repo.configured) {
-            list.addView(message("Hub ještě není nastavený. Otevři na počítači http://${ipHint()}:8080 " +
-                "a vyplň IP adresu hubu a přihlášení k Tapo účtu."))
+        if (!repo.configured || showForm) {
+            form = loginForm().also { list.addView(it) }
             return
         }
         repo.error?.let { list.addView(message(it)) }
@@ -86,6 +96,46 @@ class HeatingPage(ctx: Context) : Page(ctx) {
                 list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
             }
         }
+    }
+
+    private var showForm = false
+
+    /** Přihlášení k hubu přímo na hodinách (klávesnice HeliBoard z okna Aplikace). */
+    private fun loginForm(): View {
+        val s = app.settings
+        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(message("Přihlášení k hubu (Kasa KH100 / Tapo H100). Stejné údaje jako v aplikaci Kasa/Tapo. " +
+            "Jde to i z mobilu na http://${ipHint()}:8080."))
+        fun input(label: String, value: String, password: Boolean = false) = android.widget.EditText(ctx).apply {
+            hint = label
+            setText(value)
+            setTextColor(Ui.TEXT)
+            setHintTextColor(Ui.DIM)
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, u * 5)
+            background = Ui.rounded(Ui.CARD, u * 2)
+            setPadding((u * 3).toInt(), (u * 2).toInt(), (u * 3).toInt(), (u * 2).toInt())
+            isSingleLine = true
+            inputType = if (password) android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            else android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        }
+        val ip = input("IP adresa hubu", s.hubIp)
+        val user = input("E-mail k účtu Kasa / Tapo", s.tapoUser)
+        val pass = input(if (s.tapoPass.isNotEmpty()) "Heslo (uložené — nech prázdné)" else "Heslo", "", password = true)
+        val lp = { LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() } }
+        col.addView(ip, lp()); col.addView(user, lp()); col.addView(pass, lp())
+        col.addView(Ui.button(ctx, "Uložit a připojit", u * 5, Ui.PRIMARY, Ui.BG) {
+            s.hubIp = ip.text.toString().trim()
+            s.tapoUser = user.text.toString().trim()
+            if (pass.text.isNotEmpty()) s.tapoPass = pass.text.toString()
+            (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                .hideSoftInputFromWindow(pass.windowToken, 0)
+            showForm = false
+            list.removeView(form)
+            form = null
+            app.heating.reset()
+            render()
+        }, lp())
+        return col
     }
 
     private fun valveCard(v: TapoChild): View {
