@@ -103,29 +103,34 @@ object VoiceWake {
     }
 
     // --- A) automatické zesílení: tichý mikrofon hodin → úroveň, se kterou rozpoznávání pracuje
-    private var gain = 4.0
+    private var gain = 10.0
+    /** Úroveň šumu v místnosti (bez zesílení) — sleduje se průběžně. */
+    private var noise = 25.0
+    /** Byl poslední úsek řeč? (hlasitější než šum v místnosti) */
+    @Volatile private var speech = false
 
     private fun amplify(buf: ShortArray, n: Int) {
         var s = 0.0
         for (i in 0 until n) s += buf[i].toDouble() * buf[i]
         val rms = Math.sqrt(s / n)
-        if (rms > 60) { // pravděpodobně řeč — dorovnat ji zhruba na 3000
-            val target = (3000.0 / rms).coerceIn(1.0, 12.0)
-            gain = gain * 0.8 + target * 0.2
+        speech = rms > maxOf(noise * 2.5, 40.0)
+        if (speech) {
+            // řeč dorovnat zhruba na 3000 (mikrofon hodin je velmi tichý: řeč ~120, ticho ~20)
+            val target = (3000.0 / rms).coerceIn(1.0, 40.0)
+            gain = gain * 0.7 + target * 0.3
+        } else {
+            noise = noise * 0.95 + rms * 0.05
         }
         for (i in 0 until n) buf[i] = (buf[i] * gain).toInt().coerceIn(-32768, 32767).toShort()
     }
 
-    // --- B) nahrání jedné věty (klepnutí na mikrofon) — konec po krátké pauze
     private class Capture(val done: (ShortArray?) -> Unit) {
         val out = java.io.ByteArrayOutputStream()
         var started = false
         var quietMs = 0
         var totalMs = 0
         fun feed(buf: ShortArray, n: Int): Boolean {
-            var s = 0.0
-            for (i in 0 until n) s += buf[i].toDouble() * buf[i]
-            val loud = Math.sqrt(s / n) > 900 // po zesílení
+            val loud = speech
             val bb = java.nio.ByteBuffer.allocate(n * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
             for (i in 0 until n) bb.putShort(buf[i])
             out.write(bb.array())
@@ -136,7 +141,8 @@ object VoiceWake {
         }
         fun finish() {
             val bytes = out.toByteArray()
-            done(if (started) java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+            // i bez zjištěné řeči poslat — přepis pozná sám, jestli někdo mluvil
+            done(if (bytes.isNotEmpty()) java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
                 .let { sb -> ShortArray(sb.remaining()).also { sb.get(it) } } else null)
         }
     }
