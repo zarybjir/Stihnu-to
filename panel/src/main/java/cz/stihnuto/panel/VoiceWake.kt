@@ -6,7 +6,10 @@ import android.util.Log
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import java.io.File
@@ -79,6 +82,7 @@ object VoiceWake {
     /** Vlastní smyčka: mikrofon (zvolený vstup) → Vosk. */
     private fun run(app: App) {
         var rec: AudioRecord? = null
+        var fx: List<android.media.audiofx.AudioEffect> = emptyList()
         try {
             val mode = app.settings.voiceMode
             val gem = mode != "vosk"
@@ -93,6 +97,7 @@ object VoiceWake {
             rec = AudioRecord(src, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 16000))
             if (rec.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("mikrofon (vstup $src) nejde otevřít")
             rec.startRecording()
+            fx = attachEffects(rec.audioSessionId)
             status = when (mode) {
                 "free" -> "Poslouchám vše, Gemini pozná, kdy mluvíš na mě (vstup ${MicProbe.name(src)})"
                 "gemini" -> "Poslouchám na „${app.settings.wakePhrase}“ přes Gemini (vstup ${MicProbe.name(src)})"
@@ -135,6 +140,7 @@ object VoiceWake {
             status = "Hlasová aktivace nejde spustit: ${e.message ?: e.javaClass.simpleName}"
             if (worker === Thread.currentThread()) worker = null
         } finally {
+            fx.forEach { try { it.release() } catch (_: Exception) {} }
             try { rec?.stop(); rec?.release() } catch (_: Exception) {}
         }
     }
@@ -260,15 +266,19 @@ object VoiceWake {
 
     /** Nahraje jednu větu z mikrofonu (i když hlasová aktivace neběží). null = nic neřekl. */
     fun recordUtterance(app: App, done: (ShortArray?) -> Unit) {
-        val c = Capture(done = done)
+        duck(app, true) // ztlumit hrající hudbu, ať je přes ni slyšet
+        val wrapped: (ShortArray?) -> Unit = { pcm -> duck(app, false); done(pcm) }
+        val c = Capture(done = wrapped)
         if (worker != null) { capture = c; return }
         Thread({
             var rec: AudioRecord? = null
+            var fx: List<android.media.audiofx.AudioEffect> = emptyList()
             try {
                 val min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
                 rec = AudioRecord(app.settings.micSource, 16000, AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 16000))
                 rec.startRecording()
+                fx = attachEffects(rec.audioSessionId)
                 val buf = ShortArray(1600)
                 while (true) {
                     val n = rec.read(buf, 0, buf.size)
@@ -279,11 +289,47 @@ object VoiceWake {
                 c.finish()
             } catch (e: Exception) {
                 Log.w("Panel", "record", e)
-                done(null)
+                wrapped(null)
             } finally {
+                fx.forEach { try { it.release() } catch (_: Exception) {} }
                 try { rec?.stop(); rec?.release() } catch (_: Exception) {}
             }
         }, "record").apply { isDaemon = true; start() }
+    }
+
+    /** Zapne potlačení ozvěny (vlastní reproduktor hodin) a šumu na nahrávání. */
+    private fun attachEffects(sessionId: Int): List<android.media.audiofx.AudioEffect> {
+        val out = mutableListOf<android.media.audiofx.AudioEffect>()
+        try {
+            if (android.media.audiofx.AcousticEchoCanceler.isAvailable())
+                android.media.audiofx.AcousticEchoCanceler.create(sessionId)?.also { it.enabled = true; out += it }
+        } catch (e: Exception) { Log.w("Panel", "aec", e) }
+        try {
+            if (android.media.audiofx.NoiseSuppressor.isAvailable())
+                android.media.audiofx.NoiseSuppressor.create(sessionId)?.also { it.enabled = true; out += it }
+        } catch (e: Exception) { Log.w("Panel", "ns", e) }
+        return out
+    }
+
+    private var focusReq: AudioFocusRequest? = null
+
+    /** Na dobu poslechu ztlumí ostatní zvuk (hudbu), ať je přes něj hlas slyšet. */
+    private fun duck(app: App, on: Boolean) {
+        val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
+        try {
+            if (on) {
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                    .build()
+                focusReq = req
+                am.requestAudioFocus(req)
+            } else {
+                focusReq?.let { am.abandonAudioFocusRequest(it) }
+                focusReq = null
+            }
+        } catch (e: Exception) { Log.w("Panel", "duck", e) }
     }
 
     fun stop() {
