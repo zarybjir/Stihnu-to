@@ -41,11 +41,6 @@ class MusicPage(ctx: Context) : Page(ctx) {
     private val transport = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
     private val controls = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
     private val launch = Ui.button(ctx, "Otevřít přehrávač", u * 5.5f, Ui.PRIMARY, Ui.BG) { open("youtube_music") }
-    // malý odkaz: zapnout zobrazení a ovládání přehrávání (stejné jako služba Usnadnění)
-    private val grantLink = Ui.text(ctx, "Zobrazit, co hraje, a ovládat → zapnout", u * 3.8f, Ui.ACCENT).apply {
-        isClickable = true
-        setOnClickListener { openListenerSettings() }
-    }
 
     private val onMedia = { update() }
 
@@ -75,25 +70,8 @@ class MusicPage(ctx: Context) : Page(ctx) {
             LinearLayout.LayoutParams((u * 14).toInt(), (u * 14).toInt()))
         col.addView(controls, lp(top = u * 6))
         col.addView(launch, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 6).toInt() })
-        col.addView(grantLink, lp(top = u * 2.5f))
 
         root.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
-    }
-
-    /** Otevře systémové „Přístup k oznámením“ — stejně jako Usnadnění přes něj zapneš „Panel“. */
-    private fun openListenerSettings() {
-        val intents = listOf(
-            android.content.Intent("android.settings.NOTIFICATION_LISTENER_DETAIL_SETTINGS")
-                .putExtra("android.provider.extra.NOTIFICATION_LISTENER_COMPONENT_NAME",
-                    android.content.ComponentName(ctx, cz.stihnuto.panel.MediaListener::class.java).flattenToString()),
-            android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
-        )
-        for (i in intents) {
-            try {
-                ctx.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)); return
-            } catch (e: Exception) { /* zkusí další variantu */ }
-        }
-        grantLink.text = "Nastavení se tu nedá otevřít — půjde jen přes počítač (adb)."
     }
 
     private fun lp(top: Float) = LinearLayout.LayoutParams(-1, -2).apply { topMargin = top.toInt() }
@@ -112,7 +90,6 @@ class MusicPage(ctx: Context) : Page(ctx) {
         title.text = if (playing) m.title else "Hudba"
         artist.text = if (playing) m.artist ?: "" else ""
         appLabel.text = if (playing) m.appName?.let { "Hraje v: $it" } ?: "" else ""
-        grantLink.gone(!m.permissionMissing)
         art.set(if (playing) m.art else null)
         play.icon = if (m.isPlaying) IconButton.PAUSE else IconButton.PLAY
         volume.text = "${m.volumePercent} %"
