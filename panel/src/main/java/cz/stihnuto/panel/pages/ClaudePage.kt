@@ -106,6 +106,7 @@ class ClaudePage(ctx: Context) : Page(ctx) {
                 app.io.execute {
                     val text = try { cz.stihnuto.panel.Transcribe.text(app, pcm) } catch (e: Exception) { "" .also {
                         app.main.post { status.text = e.message ?: "Přepis selhal" } } }
+                    cz.stihnuto.panel.VoiceWake.log("přepis Gemini: „$text“")
                     cz.stihnuto.panel.VoiceWake.pause(false)
                     app.main.post { if (text.isNotBlank()) ask(text) else if (status.text == "Přepisuji…") status.text = "Nerozuměl jsem, zkus to znovu" }
                 }
@@ -158,10 +159,12 @@ class ClaudePage(ctx: Context) : Page(ctx) {
     }
 
     fun ask(text: String) {
+        cz.stihnuto.panel.VoiceWake.log("ptám se: „$text“")
         you.text = "„$text“"
         answer.text = ""
         status.text = "Přemýšlím…"
         assistant(app).ask(text) { reply ->
+            cz.stihnuto.panel.VoiceWake.log("odpověď: ${reply.take(60)}")
             app.main.post {
                 answer.text = reply
                 idle()

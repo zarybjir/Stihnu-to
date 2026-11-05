@@ -31,6 +31,15 @@ object VoiceWake {
     @Volatile var lastHeardAt = 0L
         private set
 
+    /** Posledních pár kroků hlasového ovládání (diagnostika na displeji). */
+    private val events = java.util.ArrayDeque<String>()
+    fun log(msg: String) = synchronized(events) {
+        val t = java.time.LocalTime.now().withNano(0)
+        events.addFirst("$t $msg")
+        while (events.size > 6) events.removeLast()
+    }
+    fun events(): List<String> = synchronized(events) { events.toList() }
+
     /** Okno Claude se přihlásí, aby povel zobrazilo a odpověď přečetlo nahlas. */
     var onCommand: ((String) -> Unit)? = null
     /** Volá se, když zazní aktivační fráze (zobrazit „Poslouchám…“). */
@@ -286,6 +295,7 @@ object VoiceWake {
     }
 
     private fun wake() {
+        log("fráze zachycena")
         awaitingCommand = true
         wakeAt = System.currentTimeMillis()
         onWake?.invoke()
@@ -293,6 +303,7 @@ object VoiceWake {
 
     private fun handle(app: App, raw: String) {
         val text = raw.trim()
+        if (text.isNotEmpty()) log("věta: „$text“")
         if (text.isNotEmpty()) { lastHeard = text; lastHeardAt = System.currentTimeMillis() }
         if (awaitingCommand && System.currentTimeMillis() - wakeAt > 10_000) awaitingCommand = false
         val n = norm(text)
@@ -307,12 +318,19 @@ object VoiceWake {
             awaitingCommand && text.isNotEmpty() -> text
             else -> null
         }
+        if (text.isNotEmpty()) log(when {
+            command != null -> "→ povel: „$command“"
+            m != null -> "→ fráze bez povelu, čekám na povel"
+            awaitingCommand -> "→ ?"
+            else -> "→ bez fráze „${app.settings.wakePhrase}“, ignoruji"
+        })
         if (command != null) {
             awaitingCommand = false
             Log.i("Panel", "povel: $command")
             val target = onCommand
             if (target != null) target(command) else {
-                cz.stihnuto.panel.pages.ClaudePage.assistant(app).ask(command) { }
+                log("okno asistenta není — ptám se na pozadí")
+                cz.stihnuto.panel.pages.ClaudePage.assistant(app).ask(command) { log("odpověď: ${it.take(60)}") }
             }
         }
     }

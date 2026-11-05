@@ -502,10 +502,10 @@ class AppsPage(ctx: Context) : Page(ctx) {
         val ago = (System.currentTimeMillis() - vw.lastHeardAt) / 1000
         val probe = cz.stihnuto.panel.MicProbe.result
         voiceStatus?.text = (if (probe.isNotEmpty()) "$probe\n" else "") + vw.status +
-            (if (vw.running) " · hlasitost ${vw.level}" else "") + if (vw.running) {
+            (if (vw.running) " · hlasitost ${vw.level}" else "") + (if (vw.running) {
             if (vw.lastHeardAt == 0L) "\nZatím nic neslyšel — zkus mluvit nahlas u hodin (mikrofon možná drží Google)."
             else "\nNaposledy slyšeno (před $ago s): „${vw.lastHeard}“"
-        } else ""
+        } else "") + vw.events().takeIf { it.isNotEmpty() }?.joinToString("\n", "\n") { "  $it" }.orEmpty()
         val all = Updater.catalog.joinToString("|") { Updater.status(it.key) }
         for (item in Updater.catalog) statusViews[item.key]?.let { v ->
             val s = Updater.status(item.key)
