@@ -78,16 +78,24 @@ object VoiceWake {
     private fun run(app: App) {
         var rec: AudioRecord? = null
         try {
-            if (!modelReady(app)) download(app)
-            status = "Načítám model…"
-            val m = model ?: Model(modelPath(app)).also { model = it }
-            val recognizer = Recognizer(m, 16000f)
+            val mode = app.settings.voiceMode
+            val gem = mode != "vosk"
+            if (gem && app.settings.geminiKey.isBlank()) throw IllegalStateException("tenhle režim potřebuje klíč ke Gemini (okno Aplikace → Asistent)")
+            val recognizer = if (gem) null else {
+                if (!modelReady(app)) download(app)
+                status = "Načítám model…"
+                Recognizer(model ?: Model(modelPath(app)).also { model = it }, 16000f)
+            }
             val src = app.settings.micSource
             val min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             rec = AudioRecord(src, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 16000))
             if (rec.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("mikrofon (vstup $src) nejde otevřít")
             rec.startRecording()
-            status = "Poslouchám na „${app.settings.wakePhrase}“ (vstup ${MicProbe.name(src)})"
+            status = when (mode) {
+                "free" -> "Poslouchám vše, Gemini pozná, kdy mluvíš na mě (vstup ${MicProbe.name(src)})"
+                "gemini" -> "Poslouchám na „${app.settings.wakePhrase}“ přes Gemini (vstup ${MicProbe.name(src)})"
+                else -> "Poslouchám na „${app.settings.wakePhrase}“ (vstup ${MicProbe.name(src)})"
+            }
             val buf = ShortArray(1600) // 0,1 s
             var sum = 0.0; var count = 0
             while (worker === Thread.currentThread()) {
@@ -98,7 +106,8 @@ object VoiceWake {
                 if (count >= 8000) { level = Math.sqrt(sum / count).toInt(); sum = 0.0; count = 0 }
                 amplify(buf, n)
                 capture?.let { if (it.feed(buf, n)) { capture = null; it.finish() } }
-                if (paused) continue
+                if (paused) { autoCap = null; continue }
+                if (recognizer == null) { listenGemini(app, mode, buf, n); continue }
                 if (recognizer.acceptWaveForm(buf, n)) {
                     handle(app, JSONObject(recognizer.result).optString("text"))
                     lastPartial = ""
@@ -118,7 +127,7 @@ object VoiceWake {
                     }
                 }
             }
-            recognizer.close()
+            recognizer?.close()
         } catch (e: Throwable) {
             Log.w("Panel", "voice wake", e)
             status = "Hlasová aktivace nejde spustit: ${e.message ?: e.javaClass.simpleName}"
@@ -153,11 +162,12 @@ object VoiceWake {
         for (i in 0 until n) buf[i] = (buf[i] * g).toInt().coerceIn(-32768, 32767).toShort()
     }
 
-    private class Capture(val done: (ShortArray?) -> Unit) {
+    private class Capture(val maxMs: Int = 9000, val done: (ShortArray?) -> Unit) {
         val out = java.io.ByteArrayOutputStream()
         var started = false
         var quietMs = 0
         var totalMs = 0
+        var speechMs = 0
         fun feed(buf: ShortArray, n: Int): Boolean {
             val loud = speech
             val bb = java.nio.ByteBuffer.allocate(n * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
@@ -165,8 +175,8 @@ object VoiceWake {
             out.write(bb.array())
             val ms = n * 1000 / 16000
             totalMs += ms
-            if (loud) { started = true; quietMs = 0 } else quietMs += ms
-            return (started && quietMs > 1200) || totalMs > 9000 || (!started && totalMs > 5000)
+            if (loud) { started = true; quietMs = 0; speechMs += ms } else quietMs += ms
+            return (started && quietMs > END_SILENCE_MS) || totalMs > maxMs || (!started && totalMs > 5000)
         }
         fun finish() {
             val bytes = out.toByteArray()
@@ -177,9 +187,65 @@ object VoiceWake {
     }
     @Volatile private var capture: Capture? = null
 
+    /** Ticho, po kterém je věta u konce (ms). */
+    const val END_SILENCE_MS = 2000
+
+    // --- režimy přes Gemini: hodiny samy poznají začátek řeči, větu nahrají a pošlou na přepis
+    private var autoCap: Capture? = null
+    private val preroll = java.util.ArrayDeque<ShortArray>()
+    @Volatile private var gemBusy = false
+    /** Chvíli po odpovědi bere i navazující větu bez fráze. */
+    @Volatile private var followUpUntil = 0L
+
+    fun followUp() { followUpUntil = System.currentTimeMillis() + 10_000 }
+
+    private fun listenGemini(app: App, mode: String, buf: ShortArray, n: Int) {
+        val chunk = buf.copyOf(n)
+        val cap = autoCap
+        if (cap == null) {
+            preroll.addLast(chunk)
+            while (preroll.size > 4) preroll.removeFirst()
+            if (!speech || gemBusy) return
+            // začátek řeči: vezmi i kousek před ním, ať se neusekne první slovo
+            val c = Capture(15_000) { pcm -> if (pcm != null) sendGemini(app, mode, pcm) }
+            preroll.forEach { c.feed(it, it.size) }
+            preroll.clear()
+            autoCap = c
+            return
+        }
+        if (cap.feed(chunk, chunk.size)) {
+            autoCap = null
+            // krátké zvuky (bouchnutí, kašel) neposílat
+            if (cap.speechMs >= 400) cap.finish()
+        }
+    }
+
+    private fun sendGemini(app: App, mode: String, pcm: ShortArray) {
+        gemBusy = true
+        val follow = System.currentTimeMillis() < followUpUntil
+        app.io.execute {
+            try {
+                val r = Transcribe.listen(app, pcm, mode == "free", follow)
+                if (r.text.isNotBlank()) { lastHeard = r.text; lastHeardAt = System.currentTimeMillis() }
+                log("věta: „${r.text}“")
+                if (r.forMe && r.command.isNotBlank()) {
+                    log("→ povel: „${r.command}“")
+                    followUpUntil = 0
+                    val target = onCommand
+                    if (target != null) target(r.command)
+                    else cz.stihnuto.panel.pages.ClaudePage.assistant(app).ask(r.command) { log("odpověď: ${it.take(60)}") }
+                } else if (r.text.isNotBlank()) log("→ nemluví na mě, ignoruji")
+            } catch (e: Exception) {
+                log("Gemini: ${e.message}")
+            } finally {
+                gemBusy = false
+            }
+        }
+    }
+
     /** Nahraje jednu větu z mikrofonu (i když hlasová aktivace neběží). null = nic neřekl. */
     fun recordUtterance(app: App, done: (ShortArray?) -> Unit) {
-        val c = Capture(done)
+        val c = Capture(done = done)
         if (worker != null) { capture = c; return }
         Thread({
             var rec: AudioRecord? = null

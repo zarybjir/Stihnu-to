@@ -42,6 +42,8 @@ class Settings(ctx: Context) {
         get() = p.getBoolean("voice_wake", false)
         set(v) { p.edit().putBoolean("voice_wake", v).apply() }
     var wakePhrase: String by str("wake_phrase", "prosím Pepo")
+    /** vosk = fráze offline; gemini = fráze, poslouchá Gemini; free = bez fráze, Gemini pozná, že mluvíš na hodiny. */
+    var voiceMode: String by str("voice_mode", "vosk")
     /** Vstup mikrofonu (MediaRecorder.AudioSource), vybraný testem mikrofonu. */
     var micSource: Int by int("mic_source", android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION)
 

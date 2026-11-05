@@ -179,7 +179,9 @@ class ClaudePage(ctx: Context) : Page(ctx) {
         cz.stihnuto.panel.VoiceWake.pause(true) // ať hodiny neposlouchají samy sebe
         t.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
             override fun onStart(id: String?) {}
-            override fun onDone(id: String?) { app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.pause(false) }, 400) }
+            override fun onDone(id: String?) {
+                app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.pause(false); cz.stihnuto.panel.VoiceWake.followUp() }, 400)
+            }
             @Deprecated("Deprecated in Java")
             override fun onError(id: String?) { cz.stihnuto.panel.VoiceWake.pause(false) }
         })

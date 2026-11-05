@@ -173,8 +173,30 @@ class AppsPage(ctx: Context) : Page(ctx) {
         }
         val vCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         vCol.addView(Ui.text(ctx, "Hlasová aktivace „${app.settings.wakePhrase}“", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
-        vCol.addView(Ui.text(ctx, "Řekni frázi a hned povel, např. „prosím Pepo, zatop v obýváku na 22“. Poslouchá se " +
-            "přímo v hodinách, Claudovi jde jen povel. Poprvé stáhne český model (46 MB).", u * 3.8f, Ui.DIM))
+        val mode = app.settings.voiceMode
+        vCol.addView(Ui.text(ctx, when (mode) {
+            "free" -> "Bez fráze: hodiny nahrají každou větu, Gemini ji přepíše a pozná, jestli mluvíš na ně. " +
+                "Každá věta v místnosti jde ke Googlu a čerpá bezplatný limit Gemini."
+            "gemini" -> "Řekni frázi a povel, např. „Pepo, přidej mléko“. Věty přepisuje Gemini (rozumí líp, " +
+                "ale každá věta v místnosti jde ke Googlu)."
+            else -> "Řekni frázi a hned povel, např. „prosím Pepo, zatop v obýváku na 22“. Poslouchá se " +
+                "přímo v hodinách (offline), Claudovi jde jen povel. Rozpoznává hůř."
+        }, u * 3.8f, Ui.DIM))
+        val modes = LinearLayout(ctx)
+        listOf("vosk" to "Fráze offline", "gemini" to "Fráze + Gemini", "free" to "Bez fráze").forEachIndexed { i, (k, label) ->
+            val on = mode == k
+            modes.addView(Ui.button(ctx, label, u * 4f, if (on) Ui.ACCENT else Ui.CARD_HI, if (on) Ui.BG else Ui.TEXT) {
+                if (app.settings.voiceMode != k) {
+                    app.settings.voiceMode = k
+                    if (app.settings.voiceWake) {
+                        cz.stihnuto.panel.VoiceWake.stop()
+                        app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.start(app) }, 700)
+                    }
+                    render()
+                }
+            }, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) leftMargin = (u * 2).toInt() })
+        }
+        vCol.addView(modes, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
         voiceStatus = Ui.text(ctx, cz.stihnuto.panel.VoiceWake.status, u * 3.8f, Ui.ACCENT)
         vCol.addView(voiceStatus)
         vCol.addView(Ui.button(ctx, if (cz.stihnuto.panel.MicProbe.running) "Testuji…" else "Test mikrofonu", u * 4f) {
