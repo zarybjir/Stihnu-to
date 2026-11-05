@@ -52,6 +52,20 @@ class Co2Meter(app: App) : Repo(app) {
 
     val fresh get() = co2 != null && System.currentTimeMillis() - updatedAt < 2 * 60_000L
 
+    /**
+     * Zařízení přišlo při startu panelu kvůli připojení (manifest ho směruje sem).
+     * V tu chvíli má panel k USB přístup rovnou, bez systémového okna.
+     */
+    fun onAttached(dev: UsbDevice) {
+        val isMeter = (dev.vendorId == VID && dev.productId == PID) ||
+            (dev.vendorId == WCH_VID && dev.productId == WCH_PID)
+        if (!isMeter || reader != null) return
+        status = "Měřič připojen, otvírám…"
+        notifyChanged()
+        // přišel přes připojení → panel k němu má přístup i bez systémového okna
+        if (usb.hasPermission(dev)) start(dev) else connect()
+    }
+
     fun connect() {
         if (reader != null) return
         val all = usb.deviceList.values
