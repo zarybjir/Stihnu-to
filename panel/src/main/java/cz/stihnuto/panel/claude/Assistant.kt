@@ -16,6 +16,7 @@ import com.anthropic.models.messages.StopReason
 import com.anthropic.models.messages.Tool
 import com.anthropic.models.messages.ToolResultBlockParam
 import cz.stihnuto.panel.App
+import cz.stihnuto.panel.Co2Meter
 import cz.stihnuto.panel.Ui
 import cz.stihnuto.panel.pages.Pages
 import cz.stihnuto.panel.weather.WeatherApi
@@ -307,6 +308,10 @@ class Assistant(private val app: App) {
                 .put("topi", c.heating).put("vlhkost", c.humidity).put("online", c.online)
         }))
         app.heating.error?.let { j.put("topeni_chyba", it) }
+        app.co2.co2?.takeIf { app.co2.fresh }?.let { ppm ->
+            j.put("vzduch_v_mistnosti", JSONObject().put("co2_ppm", ppm).put("teplota", app.co2.temp)
+                .put("vlhkost", app.co2.humidity).put("hodnoceni", Co2Meter.level(ppm).second))
+        }
         j.put("kalendar", JSONArray(app.calendar.upcoming().take(20).map { e ->
             JSONObject().put("nazev", e.title).put("zacatek", e.start.toString()).put("konec", e.end.toString())
                 .put("cely_den", e.allDay).put("misto", e.location)

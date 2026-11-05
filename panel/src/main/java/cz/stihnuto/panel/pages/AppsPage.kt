@@ -49,6 +49,25 @@ class AppsPage(ctx: Context) : Page(ctx) {
         list.addView(diagRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1.5f).toInt() })
         list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
 
+        // měřič CO₂ přes USB
+        val m = app.co2
+        val cRow = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+        }
+        val cCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        cCol.addView(Ui.text(ctx, "Měřič CO₂ (USB)", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+        val vals = listOfNotNull(
+            m.co2?.let { "$it ppm" }, m.temp?.let { "${Ui.num(it)} °C" }, m.humidity?.let { "${Math.round(it)} %" },
+        ).joinToString(" · ")
+        cCol.addView(Ui.text(ctx, if (vals.isNotEmpty()) "$vals — ${m.status}" else m.status, u * 3.8f,
+            if (m.fresh) Ui.GOOD else Ui.DIM))
+        cRow.addView(cCol, LinearLayout.LayoutParams(0, -2, 1f))
+        cRow.addView(Ui.button(ctx, "Připojit", u * 4.2f) { m.connect(); app.main.postDelayed({ render() }, 800) })
+        list.addView(cRow, LinearLayout.LayoutParams(-1, -2))
+        list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
+
         // poslat klíč / kalendář z mobilu přes QR kód
         list.addView(phoneBox())
         list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))

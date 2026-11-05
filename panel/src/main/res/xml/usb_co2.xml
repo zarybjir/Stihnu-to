@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- TFA AirCO2ntrol Mini / Coach (Holtek HID) -->
+    <usb-device vendor-id="1241" product-id="41042" />
+</resources>

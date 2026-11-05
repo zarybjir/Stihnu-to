@@ -121,11 +121,13 @@ class ClockPage(ctx: Context) : Page(ctx) {
             wx?.days?.firstOrNull()?.let { d ->
                 val sun = if (d.sunset != null && now.isBefore(d.sunset)) "západ" to Ui.time(d.sunset)
                 else "východ" to (wx.days.getOrNull(1)?.sunrise?.let(Ui::time) ?: "–")
-                val info = listOf(
+                val co2 = app.co2.co2?.takeIf { app.co2.fresh }
+                val info = listOfNotNull(
                     "dnes" to "${Ui.deg(d.max)} / ${Ui.deg(d.min)}",
                     "srážky" to "${Ui.num(d.precipSum)} mm",
                     "vítr" to "až ${Math.round(d.windMax)} km/h",
                     sun,
+                    co2?.let { "CO₂" to "$it ppm" },
                 )
                 val iw = (leftR - leftL) / info.size
                 // svisle doprostřed mezi čas (nebo událost) a spodní okraj
