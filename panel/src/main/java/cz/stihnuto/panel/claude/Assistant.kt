@@ -58,9 +58,14 @@ class Assistant(private val app: App) {
                 "Claude je momentálně přetížený, zkus to za chvilku."
             } catch (e: AnthropicServiceException) {
                 Log.w("Panel", "claude", e)
-                "Claude vrátil chybu ${e.statusCode()}."
+                synchronized(this) { history.clear() }
+                val why = (e.message ?: "").let { m ->
+                    Regex("\"message\"\\s*:\\s*\"([^\"]+)").find(m)?.groupValues?.get(1) ?: m
+                }.take(160)
+                "Claude vrátil chybu ${e.statusCode()}. $why"
             } catch (e: Exception) {
                 Log.w("Panel", "claude", e)
+                synchronized(this) { history.clear() }
                 "Nepovedlo se spojit s Claude (${e.message ?: e.javaClass.simpleName})."
             })
         }
@@ -80,17 +85,24 @@ class Assistant(private val app: App) {
         lastUse = System.currentTimeMillis()
 
         history += MessageParam.ofUser(text)
+        val model = app.settings.claudeModel.ifBlank { "claude-opus-5-5" }
+        // záložní model při odmítnutí umí jen Opus / Sonnet / Fable — Haiku by vrátil chybu 400
+        val fallbacks = !model.contains("haiku")
         repeat(6) {
             val params = MessageCreateParams.builder()
-                .model(app.settings.claudeModel.ifBlank { "claude-opus-5-5" })
+                .model(model)
                 .maxTokens(16000L)
                 .system(systemPrompt())
                 .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.LOW).build())
                 .tools(TOOLS.map { com.anthropic.models.messages.ToolUnion.ofTool(it) })
                 .messages(history)
-                // Když bezpečnostní filtr odmítne dotaz, server ho sám zkusí jiným modelem.
-                .putAdditionalHeader("anthropic-beta", "server-side-fallback-2026-07-01")
-                .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
+                .apply {
+                    // Když bezpečnostní filtr odmítne dotaz, server ho sám zkusí jiným modelem.
+                    if (fallbacks) {
+                        putAdditionalHeader("anthropic-beta", "server-side-fallback-2026-07-01")
+                        putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
+                    }
+                }
                 .build()
             val resp: Message = client!!.messages().create(params)
             history += resp.toParam()
