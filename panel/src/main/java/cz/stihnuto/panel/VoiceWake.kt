@@ -44,6 +44,10 @@ object VoiceWake {
     private var awaitingCommand = false
     private var wakeAt = 0L
     private var paused = false
+    private var lastPartial = ""
+    private var partialAt = 0L
+    /** Jak dlouho ještě brát zvuk jako řeč (doznívání po poslední hlasité části). */
+    private var speechHold = 0
 
     private fun modelDir(app: App) = File(app.filesDir, "vosk-cs")
     fun modelReady(app: App) = File(modelDir(app), "am").exists() || modelDir(app).listFiles()?.any { File(it, "am").exists() } == true
@@ -88,8 +92,21 @@ object VoiceWake {
                 if (paused) continue
                 if (recognizer.acceptWaveForm(buf, n)) {
                     handle(app, JSONObject(recognizer.result).optString("text"))
+                    lastPartial = ""
                 } else {
-                    partial(app, JSONObject(recognizer.partialResult).optString("partial"))
+                    val p = JSONObject(recognizer.partialResult).optString("partial")
+                    val now = System.currentTimeMillis()
+                    if (p != lastPartial) { lastPartial = p; partialAt = now }
+                    partial(app, p)
+                    // Vosk někdy větu neukončí (šum v místnosti) — když se rozpoznaný
+                    // text 1,2 s nemění, bereme ho jako hotový
+                    if (p.isNotBlank() && now - partialAt > 1200 &&
+                        (awaitingCommand || wakeRegex(app).containsMatchIn(norm(p)))
+                    ) {
+                        handle(app, JSONObject(recognizer.finalResult).optString("text").ifBlank { p })
+                        recognizer.reset()
+                        lastPartial = ""
+                    }
                 }
             }
             recognizer.close()
@@ -121,7 +138,10 @@ object VoiceWake {
         } else {
             noise = noise * 0.95 + rms * 0.05
         }
-        for (i in 0 until n) buf[i] = (buf[i] * gain).toInt().coerceIn(-32768, 32767).toShort()
+        if (speech) speechHold = 4 else if (speechHold > 0) speechHold--
+        // ticho se zesiluje jen mírně — jinak by z šumu vznikl „hlas“ a Vosk by nepoznal konec věty
+        val g = if (speech || speechHold > 0) gain else minOf(gain, 3.0)
+        for (i in 0 until n) buf[i] = (buf[i] * g).toInt().coerceIn(-32768, 32767).toShort()
     }
 
     private class Capture(val done: (ShortArray?) -> Unit) {
@@ -247,7 +267,8 @@ object VoiceWake {
     private fun wakeRegex(app: App): Regex {
         val words = norm(app.settings.wakePhrase).split(' ').filter { it.isNotEmpty() }
         if (words.isEmpty()) return Regex("$^")
-        val parts = words.mapIndexed { i, w -> if (i == words.size - 1) Regex.escape(w.take(3)) + "[a-z]*" else Regex.escape(w) }
+        val parts = words.mapIndexed { i, w -> if (i == words.size - 1 && w.length >= 3) Regex.escape(w.take(1)) + "[a-z]{1,2}" + Regex.escape(w.substring(2, 3)) + "[a-z]*"
+            else if (i == words.size - 1) Regex.escape(w) + "[a-z]*" else Regex.escape(w) }
         return Regex("\\b" + parts.joinToString("\\s+") + "\\b")
     }
 
