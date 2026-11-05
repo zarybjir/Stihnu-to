@@ -63,14 +63,24 @@ class Co2Meter(app: App) : Repo(app) {
             notifyChanged(); return
         }
         if (!usb.hasPermission(dev)) {
-            status = "Povol přístup k USB na displeji"
+            status = "Povol přístup k USB na displeji" + (dialogInfo.takeIf { it.isNotEmpty() }?.let { " · $it" } ?: "")
             notifyChanged()
+            Overlay.service?.watchUsbDialog()
             val pi = PendingIntent.getBroadcast(app, 0, Intent(ACTION_PERMISSION).setPackage(app.packageName),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
             usb.requestPermission(dev, pi)
             return
         }
         start(dev)
+    }
+
+    @Volatile private var dialogInfo = ""
+
+    /** Co služba Usnadnění zjistila o okně s povolením USB. */
+    fun dialogNote(s: String) {
+        dialogInfo = s
+        if (reader == null && co2 == null) status = "Povol přístup k USB na displeji · $s"
+        app.main.post { notifyChanged() }
     }
 
     /** Poslední přijatá data z novějšího měřiče (sériová linka) — diagnostika. */
