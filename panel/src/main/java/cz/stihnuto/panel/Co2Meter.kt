@@ -56,6 +56,7 @@ class Co2Meter(app: App) : Repo(app) {
         if (reader != null) return
         val all = usb.deviceList.values
         val dev = all.firstOrNull { it.vendorId == VID && it.productId == PID }
+            ?: all.firstOrNull { it.vendorId == WCH_VID && it.productId == WCH_PID }
         if (dev == null) {
             status = if (all.isEmpty()) "Hodiny nevidí žádné USB zařízení (port je možná jen nabíjecí)"
             else "Měřič nenalezen. Hodiny vidí: ${devices().joinToString()}"
@@ -72,7 +73,77 @@ class Co2Meter(app: App) : Repo(app) {
         start(dev)
     }
 
+    /** Poslední přijatá data z novějšího měřiče (sériová linka) — diagnostika. */
+    @Volatile var raw = ""; private set
+
+    /**
+     * Novější kusy (čip WCH CH554, „CH554_CDC“) se hlásí jako sériový port.
+     * Protokol zatím neznáme: otevřeme linku, čteme a ukážeme, co chodí;
+     * zkusíme v tom najít čísla s popiskem CO2 / teplota / vlhkost.
+     */
+    private fun startCdc(dev: UsbDevice) {
+        val conn = usb.openDevice(dev) ?: run { status = "USB nejde otevřít"; notifyChanged(); return }
+        val ifs = (0 until dev.interfaceCount).map { dev.getInterface(it) }
+        val data = ifs.firstOrNull { i -> (0 until i.endpointCount).any { i.getEndpoint(it).type == UsbConstants.USB_ENDPOINT_XFER_BULK } }
+            ?: run { status = "Měřič (CDC) nemá datový kanál"; notifyChanged(); conn.close(); return }
+        val comm = ifs.firstOrNull { it.interfaceClass == UsbConstants.USB_CLASS_COMM } ?: data
+        ifs.forEach { conn.claimInterface(it, true) }
+        val eps = (0 until data.endpointCount).map { data.getEndpoint(it) }
+        val inEp = eps.first { it.type == UsbConstants.USB_ENDPOINT_XFER_BULK && it.direction == UsbConstants.USB_DIR_IN }
+        val outEp = eps.firstOrNull { it.type == UsbConstants.USB_ENDPOINT_XFER_BULK && it.direction == UsbConstants.USB_DIR_OUT }
+        // 9600 8N1 a DTR/RTS — běžné nastavení; CDC zařízení rychlost stejně často ignorují
+        val coding = byteArrayOf(0x80.toByte(), 0x25, 0, 0, 0, 0, 8)
+        conn.controlTransfer(0x21, 0x20, 0, comm.id, coding, coding.size, 1000)
+        conn.controlTransfer(0x21, 0x22, 3, comm.id, null, 0, 1000)
+        status = "Připojeno (sériově), čekám na data…"
+        notifyChanged()
+        reader = Thread({
+            val buf = ByteArray(256)
+            val acc = java.io.ByteArrayOutputStream()
+            var lastPoke = 0L
+            try {
+                while (!Thread.currentThread().isInterrupted) {
+                    // když 10 s nic nepřijde, zkusíme měřič „pošťouchnout“ (některé čekají na dotaz)
+                    if (outEp != null && acc.size() == 0 && System.currentTimeMillis() - lastPoke > 10_000) {
+                        lastPoke = System.currentTimeMillis()
+                        val q = "\r\n".toByteArray()
+                        conn.bulkTransfer(outEp, q, q.size, 500)
+                    }
+                    val n = conn.bulkTransfer(inEp, buf, buf.size, 2000)
+                    if (n <= 0) continue
+                    acc.write(buf, 0, n)
+                    val bytes = acc.toByteArray().takeLast(96).toByteArray()
+                    val ascii = String(bytes.map { b -> if (b in 32..126) b.toInt().toChar() else '·' }.toCharArray())
+                    raw = ascii + "  [" + bytes.takeLast(24).joinToString(" ") { "%02x".format(it) } + "]"
+                    parseText(String(acc.toByteArray(), Charsets.ISO_8859_1))
+                    if (acc.size() > 4096) { val keep = acc.toByteArray().takeLast(512).toByteArray(); acc.reset(); acc.write(keep) }
+                    if (co2 == null) status = "Přijímám data, ale neumím je přečíst: $raw"
+                    notifyChanged()
+                }
+            } catch (e: Exception) {
+                Log.w("Panel", "co2 cdc", e)
+            } finally {
+                try { ifs.forEach { conn.releaseInterface(it) }; conn.close() } catch (_: Exception) {}
+            }
+        }, "co2-cdc").apply { isDaemon = true; start() }
+    }
+
+    /** Hledá v textu např. „CO2: 812 ppm“, „T=22.4“, „RH 41%“. */
+    private fun parseText(t: String) {
+        fun last(re: String) = Regex(re, RegexOption.IGNORE_CASE).findAll(t).lastOrNull()?.groupValues?.get(1)
+            ?.replace(',', '.')?.toDoubleOrNull()
+        val c = last("co2\\D{0,6}(\\d{3,4})") ?: last("(\\d{3,4})\\s*ppm")
+        val tt = last("(?:temp|t)\\s*[=:]\\s*(-?\\d{1,2}[.,]\\d)")
+        val h = last("(?:rh|hum)\\D{0,6}(\\d{1,2}(?:[.,]\\d)?)")
+        if (c != null && c in 250.0..10000.0) {
+            co2 = c.toInt(); tt?.let { temp = it }; h?.let { humidity = it }
+            updatedAt = System.currentTimeMillis()
+            status = "Měří ✓"
+        }
+    }
+
     private fun start(dev: UsbDevice) {
+        if (dev.vendorId == WCH_VID) return startCdc(dev)
         val conn = usb.openDevice(dev) ?: run { status = "USB nejde otevřít"; notifyChanged(); return }
         val intf = dev.getInterface(0)
         conn.claimInterface(intf, true)
@@ -144,6 +215,9 @@ class Co2Meter(app: App) : Repo(app) {
     companion object {
         const val VID = 0x04D9
         const val PID = 0xA052
+        /** Novější verze s čipem WCH CH554 (sériová linka). */
+        const val WCH_VID = 0x1A86
+        const val WCH_PID = 0x5722
         const val ACTION_PERMISSION = "cz.stihnuto.panel.USB_PERMISSION"
 
         /** Barva a popis podle koncentrace CO₂. */

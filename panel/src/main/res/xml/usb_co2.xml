@@ -2,4 +2,6 @@
 <resources>
     <!-- TFA AirCO2ntrol Mini / Coach (Holtek HID) -->
     <usb-device vendor-id="1241" product-id="41042" />
+    <!-- novější kusy: WCH CH554 jako sériový port (1a86:5722) -->
+    <usb-device vendor-id="6790" product-id="22306" />
 </resources>
