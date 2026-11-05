@@ -41,7 +41,17 @@ class AppsPage(ctx: Context) : Page(ctx) {
             u * 6.5f, Ui.PRIMARY, Ui.MEDIUM))
         if (ips.size > 1) list.addView(Ui.text(ctx, "Další adresy: " +
             ips.drop(1).joinToString { "${it.second} (${it.first})" }, u * 3.6f, Ui.DIM))
-        list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 5).toInt()))
+        // diagnostika: proč se nastavení neotevře v prohlížeči
+        val diagRow = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        diagText = Ui.text(ctx, diagNote, u * 3.8f, Ui.ACCENT)
+        diagRow.addView(diagText, LinearLayout.LayoutParams(0, -2, 1f))
+        diagRow.addView(Ui.button(ctx, "Test sítě", u * 4.2f) { runDiagnostics() })
+        list.addView(diagRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1.5f).toInt() })
+        list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
+
+        // asistent: výběr a klíč přímo na hodinách
+        list.addView(assistantBox())
+        list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
 
         // jas přes den: 0 = automatika hodin
         val br = app.settings.dayBrightness
@@ -271,6 +281,74 @@ class AppsPage(ctx: Context) : Page(ctx) {
             }, LinearLayout.LayoutParams((u * 24).toInt(), -2).apply { leftMargin = (u * 2).toInt() })
             list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1.5f).toInt() })
         }
+    }
+
+    private var diagText: TextView? = null
+    private var diagNote = ""
+
+    private fun runDiagnostics() {
+        diagNote = "Testuji…"; diagText?.text = diagNote
+        app.io.execute {
+            fun can(host: String, port: Int) = try {
+                java.net.Socket().use { it.connect(java.net.InetSocketAddress(host, port), 2500) }; true
+            } catch (e: Exception) { false }
+            val ip = cz.stihnuto.panel.web.WebServer.localIp()
+            val local = can("127.0.0.1", 8080)
+            val wifi = ip != null && can(ip, 8080)
+            val hubIp = app.settings.hubIp.trim()
+            val hub = hubIp.isNotEmpty() && can(hubIp, 80)
+            val web = try { cz.stihnuto.panel.Http.text("https://api.open-meteo.com/v1/forecast?latitude=50&longitude=14&current=temperature_2m"); true } catch (e: Exception) { false }
+            val verdict = when {
+                !local -> "Server panelu neběží — restartuj panel."
+                !wifi -> "Server běží, ale hodiny nepouští spojení zvenku na svou adresu."
+                hubIp.isNotEmpty() && !hub -> "Hub $hubIp není z hodin dosažitelný — špatná IP, nebo router izoluje zařízení."
+                else -> "Hodiny jsou v pořádku. Když se stránka v mobilu neotevře, router nejspíš brání spojení mezi zařízeními (izolace klientů) nebo mobil není v téže síti."
+            }
+            diagNote = "server ${if (local) "✓" else "✗"} · WiFi adresa ${if (wifi) "✓" else "✗"} · hub ${if (hub) "✓" else "✗"} · internet ${if (web) "✓" else "✗"}\n$verdict"
+            app.main.post { diagText?.text = diagNote }
+        }
+    }
+
+    /** Výběr asistenta a klíč ke Gemini — bez prohlížeče (klávesnice HeliBoard). */
+    private fun assistantBox(): View {
+        val s = app.settings
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+        }
+        val top = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        top.addView(Ui.text(ctx, "Asistent", u * 5.5f, Ui.TEXT, Ui.MEDIUM), LinearLayout.LayoutParams(0, -2, 1f))
+        for ((key, label) in listOf("gemini" to "Gemini", "claude" to "Claude")) {
+            val on = s.aiProvider == key
+            top.addView(Ui.button(ctx, label, u * 4.2f, if (on) Ui.PRIMARY else Ui.CARD_HI, if (on) Ui.BG else Ui.TEXT) {
+                s.aiProvider = key; render()
+            }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 2).toInt() })
+        }
+        box.addView(top)
+        val field = android.widget.EditText(ctx).apply {
+            hint = if (s.aiProvider == "gemini") (if (s.geminiKey.isNotEmpty()) "Klíč Gemini uložen — přepiš pro změnu" else "Klíč Gemini (AIza…)")
+            else (if (s.anthropicKey.isNotEmpty()) "Klíč Claude uložen — přepiš pro změnu" else "Klíč Claude (sk-ant-…)")
+            setTextColor(Ui.TEXT); setHintTextColor(Ui.DIM)
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, u * 4.5f)
+            background = Ui.rounded(Ui.CARD_HI, u * 2)
+            setPadding((u * 3).toInt(), (u * 2).toInt(), (u * 3).toInt(), (u * 2).toInt())
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or
+                android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        }
+        val row = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        row.addView(field, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(Ui.button(ctx, "Uložit", u * 4.2f, Ui.ACCENT, Ui.BG) {
+            val k = field.text.toString().trim()
+            if (k.isNotEmpty()) { if (s.aiProvider == "gemini") s.geminiKey = k else s.anthropicKey = k }
+            (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                .hideSoftInputFromWindow(field.windowToken, 0)
+            render()
+        }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 2).toInt() })
+        box.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
+        box.addView(Ui.text(ctx, "Klíč Gemini zdarma: aistudio.google.com/apikey", u * 3.6f, Ui.DIM))
+        return box
     }
 
     private var storageMsg: TextView? = null
