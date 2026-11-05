@@ -42,7 +42,7 @@ class Settings(ctx: Context) {
     var wakePhrase: String by str("wake_phrase", "prosím Pepo")
 
     var nightFrom: Int by int("night_from", 22)
-    var nightTo: Int by int("night_to", 7)
+    var nightTo: Int by int("night_to", 5)
     /** Jas v noci 1–100 %, 0 = neměnit. */
     var nightBrightness: Int by int("night_brightness", 8)
 
@@ -54,6 +54,11 @@ class Settings(ctx: Context) {
                 p.edit().putString("pages", saved.replaceFirst("clock", "clock,calendar")).apply()
             }
             p.edit().putInt("pages_version", 2).apply()
+        }
+        // noční ztlumení nově do 5:00 (dřív do 7:00)
+        if (p.getInt("night_version", 1) < 2) {
+            if (p.getInt("night_to", 5) == 7) p.edit().putInt("night_to", 5).apply()
+            p.edit().putInt("night_version", 2).apply()
         }
     }
 
