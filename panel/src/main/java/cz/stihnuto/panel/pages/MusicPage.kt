@@ -88,10 +88,7 @@ class MusicPage(ctx: Context) : Page(ctx) {
         // přehrávací tlačítka a název skladby jen když panel vidí, co hraje
         transport.gone(m.permissionMissing)
         title.text = if (playing) m.title else "Hudba"
-        artist.text = when {
-            playing -> m.artist ?: ""
-            else -> "Pusť ji hlasem „prosím, pusť…“ nebo tlačítkem níž."
-        }
+        artist.text = if (playing) m.artist ?: "" else ""
         appLabel.text = if (playing) m.appName?.let { "Hraje v: $it" } ?: "" else ""
         art.set(if (playing) m.art else null)
         play.icon = if (m.isPlaying) IconButton.PAUSE else IconButton.PLAY
