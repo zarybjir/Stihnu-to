@@ -140,6 +140,7 @@ class MainActivity : Activity() {
         }
         val lp = window.attributes
         lp.screenBrightness = when {
+            !night && s.dayBrightness > 0 -> s.dayBrightness / 100f
             !night -> WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
             System.currentTimeMillis() < wakeUntil -> 0.5f
             else -> s.nightBrightness / 100f

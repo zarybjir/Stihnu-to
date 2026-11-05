@@ -41,6 +41,8 @@ class Settings(ctx: Context) {
         set(v) { p.edit().putBoolean("voice_wake", v).apply() }
     var wakePhrase: String by str("wake_phrase", "prosím Pepo")
 
+    /** Jas přes den 1–100 %, 0 = nechat automatiku hodin. */
+    var dayBrightness: Int by int("day_brightness", 0)
     var nightFrom: Int by int("night_from", 22)
     var nightTo: Int by int("night_to", 5)
     /** Jas v noci 1–100 %, 0 = neměnit. */

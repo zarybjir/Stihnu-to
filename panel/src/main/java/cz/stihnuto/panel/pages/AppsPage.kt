@@ -42,6 +42,34 @@ class AppsPage(ctx: Context) : Page(ctx) {
         if (ips.size > 1) list.addView(Ui.text(ctx, "Další adresy: " +
             ips.drop(1).joinToString { "${it.second} (${it.first})" }, u * 3.6f, Ui.DIM))
         list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 5).toInt()))
+
+        // jas přes den: 0 = automatika hodin
+        val br = app.settings.dayBrightness
+        val bRow = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 2.5f).toInt(), (u * 3).toInt(), (u * 2.5f).toInt())
+        }
+        bRow.addView(Ui.text(ctx, "Jas přes den", u * 5.5f, Ui.TEXT, Ui.MEDIUM), LinearLayout.LayoutParams(0, -2, 1f))
+        fun setBr(v: Int) {
+            app.settings.dayBrightness = v.coerceIn(0, 100)
+            (ctx as? android.app.Activity)?.window?.let { w ->
+                val lp = w.attributes
+                lp.screenBrightness = if (v <= 0) android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else v / 100f
+                w.attributes = lp
+            }
+            render()
+        }
+        val bb = (u * 12).toInt()
+        bRow.addView(Ui.button(ctx, "Auto", u * 4.2f, if (br == 0) Ui.PRIMARY else Ui.CARD_HI, if (br == 0) Ui.BG else Ui.TEXT) { setBr(0) })
+        bRow.addView(Ui.button(ctx, "−", u * 6f) { setBr(if (br == 0) 70 else (br - 10).coerceAtLeast(10)) },
+            LinearLayout.LayoutParams(bb, bb).apply { leftMargin = (u * 2).toInt() })
+        bRow.addView(Ui.text(ctx, if (br == 0) "auto" else "$br %", u * 5f, Ui.TEXT, Ui.MEDIUM).apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams((u * 16).toInt(), -2))
+        bRow.addView(Ui.button(ctx, "+", u * 6f) { setBr(if (br == 0) 80 else (br + 10).coerceAtMost(100)) },
+            LinearLayout.LayoutParams(bb, bb))
+        list.addView(bRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = (u * 5).toInt() })
+
         renderWindows()
         list.addView(Ui.text(ctx, "Aplikace", u * 7, Ui.TEXT, Ui.MEDIUM),
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 6).toInt() })

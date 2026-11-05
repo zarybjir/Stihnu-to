@@ -82,6 +82,7 @@ ${field("claude_model", "Model", s.claudeModel, "Výchozí <code>claude-opus-5-5
 
 <h2>Noc</h2>
 <div class="row">${field("night_from", "Noc od (hodina)", s.nightFrom.toString(), type = "number")}${field("night_to", "do (hodina)", s.nightTo.toString(), type = "number")}${field("night_brightness", "Jas v noci (%, 0 = neměnit)", s.nightBrightness.toString(), type = "number")}</div>
+${field("day_brightness", "Jas přes den (%, 0 = automatika hodin)", s.dayBrightness.toString(), "Když hodiny přes den samy tmavnou, nastav třeba 80.", type = "number")}
 
 <button>Uložit</button>
 </form>
@@ -158,6 +159,7 @@ fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body
         f["claude_model"]?.trim()?.takeIf { it.isNotEmpty() }?.let { s.claudeModel = it }
         f["night_from"]?.toIntOrNull()?.let { s.nightFrom = it.coerceIn(0, 23) }
         f["night_to"]?.toIntOrNull()?.let { s.nightTo = it.coerceIn(0, 23) }
+        f["day_brightness"]?.toIntOrNull()?.let { s.dayBrightness = it.coerceIn(0, 100) }
         f["night_brightness"]?.toIntOrNull()?.let { s.nightBrightness = it.coerceIn(0, 100) }
     }
 }
