@@ -199,6 +199,7 @@ class ClaudePage(ctx: Context) : Page(ctx) {
     private fun speak(text: String) {
         val t = tts ?: return
         if (!ttsReady) return
+        cz.stihnuto.panel.Speech.apply(app, t) // zvolený hlas a výška
         cz.stihnuto.panel.VoiceWake.pause(true) // ať hodiny neposlouchají samy sebe
         t.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
             override fun onStart(id: String?) {}

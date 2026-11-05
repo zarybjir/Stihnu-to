@@ -47,6 +47,10 @@ class Settings(ctx: Context) {
     /** Vstup mikrofonu (MediaRecorder.AudioSource), vybraný testem mikrofonu. */
     var micSource: Int by int("mic_source", android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION)
 
+    /** Hlas asistenta (jméno hlasu z enginu; prázdné = výchozí) a jeho výška 50–150 %. */
+    var ttsVoice: String by str("tts_voice", "")
+    var ttsPitch: Int by int("tts_pitch", 100)
+
     /** Jas přes den 1–100 %, 0 = nechat automatiku hodin. */
     var dayBrightness: Int by int("day_brightness", 0)
     var nightFrom: Int by int("night_from", 22)

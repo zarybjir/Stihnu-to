@@ -460,6 +460,17 @@ class AppsPage(ctx: Context) : Page(ctx) {
         }
         box.addView(mRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
         box.addView(Ui.text(ctx, "Klíč Gemini zdarma: aistudio.google.com/apikey · Klíč pošleš i přes „Poslat z mobilu“", u * 3.6f, Ui.DIM))
+
+        // hlas asistenta (hlasy z enginu hodin + výška)
+        val vRow = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        vRow.addView(Ui.text(ctx, "Hlas", u * 4f, Ui.DIM), LinearLayout.LayoutParams(-2, -2).apply { rightMargin = (u * 2).toInt() })
+        vRow.addView(Ui.button(ctx, "Jiný hlas", u * 3.8f) { cz.stihnuto.panel.Speech.nextVoice(app) },
+            LinearLayout.LayoutParams(-2, -2).apply { rightMargin = (u * 2).toInt() })
+        vRow.addView(Ui.button(ctx, "Hlubší", u * 3.8f) { cz.stihnuto.panel.Speech.setPitch(app, s.ttsPitch - 10); render() },
+            LinearLayout.LayoutParams(-2, -2).apply { rightMargin = (u * 2).toInt() })
+        vRow.addView(Ui.button(ctx, "Vyšší", u * 3.8f) { cz.stihnuto.panel.Speech.setPitch(app, s.ttsPitch + 10); render() })
+        box.addView(vRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
+        box.addView(Ui.text(ctx, "„Jiný hlas“ přepíná hlasy, které hodiny mají. „Hlubší“ hlas zmužní. Po klepnutí uslyšíš ukázku.", u * 3.4f, Ui.DIM))
         return box
     }
 
