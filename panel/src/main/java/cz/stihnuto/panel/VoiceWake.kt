@@ -44,6 +44,8 @@ object VoiceWake {
     var onCommand: ((String) -> Unit)? = null
     /** Volá se, když zazní aktivační fráze (zobrazit „Poslouchám…“). */
     var onWake: (() -> Unit)? = null
+    /** Hotová odpověď z režimu, kde Gemini odpovídá rovnou z nahrávky (zobrazit a přečíst). */
+    var onAnswer: ((String) -> Unit)? = null
 
     private var model: Model? = null
     @Volatile private var worker: Thread? = null
@@ -225,16 +227,29 @@ object VoiceWake {
         val follow = System.currentTimeMillis() < followUpUntil
         app.io.execute {
             try {
-                val r = Transcribe.listen(app, pcm, mode == "free", follow)
-                if (r.text.isNotBlank()) { lastHeard = r.text; lastHeardAt = System.currentTimeMillis() }
-                log("věta: „${r.text}“")
-                if (r.forMe && r.command.isNotBlank()) {
-                    log("→ povel: „${r.command}“")
-                    followUpUntil = 0
-                    val target = onCommand
-                    if (target != null) target(r.command)
-                    else cz.stihnuto.panel.pages.ClaudePage.assistant(app).ask(r.command) { log("odpověď: ${it.take(60)}") }
-                } else if (r.text.isNotBlank()) log("→ nemluví na mě, ignoruji")
+                if (app.settings.aiProvider == "gemini") {
+                    // Gemini odpovídá: jedno volání z nahrávky rovnou rozhodne, jedná a odpoví
+                    val reply = cz.stihnuto.panel.pages.ClaudePage.assistant(app)
+                        .answerAudio(pcm, if (mode == "free") "free" else "phrase")
+                    if (reply.isNotBlank()) {
+                        followUpUntil = 0
+                        lastHeard = reply; lastHeardAt = System.currentTimeMillis()
+                        log("odpověď: ${reply.take(60)}")
+                        onAnswer?.invoke(reply)
+                    } else log("→ nemluví na mě, ignoruji")
+                } else {
+                    // Claude odpovídá: Gemini nejdřív přepíše a rozhodne, pak odpoví Claude
+                    val r = Transcribe.listen(app, pcm, mode == "free", follow)
+                    if (r.text.isNotBlank()) { lastHeard = r.text; lastHeardAt = System.currentTimeMillis() }
+                    log("věta: „${r.text}“")
+                    if (r.forMe && r.command.isNotBlank()) {
+                        log("→ povel: „${r.command}“")
+                        followUpUntil = 0
+                        val target = onCommand
+                        if (target != null) target(r.command)
+                        else cz.stihnuto.panel.pages.ClaudePage.assistant(app).ask(r.command) { log("odpověď: ${it.take(60)}") }
+                    } else if (r.text.isNotBlank()) log("→ nemluví na mě, ignoruji")
+                }
             } catch (e: Exception) {
                 log("Gemini: ${e.message}")
             } finally {

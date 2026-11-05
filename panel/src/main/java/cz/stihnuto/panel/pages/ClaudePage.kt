@@ -82,6 +82,15 @@ class ClaudePage(ctx: Context) : Page(ctx) {
             }
         }
         cz.stihnuto.panel.VoiceWake.onCommand = { cmd -> app.main.post { app.showPage("claude"); ask(cmd) } }
+        cz.stihnuto.panel.VoiceWake.onAnswer = { reply ->
+            app.main.post {
+                app.showPage("claude")
+                you.text = ""
+                answer.text = reply
+                idle()
+                speak(reply)
+            }
+        }
     }
 
     private fun idle() {
@@ -100,15 +109,29 @@ class ClaudePage(ctx: Context) : Page(ctx) {
             mic.active = true
             status.text = "Poslouchám…"
             you.text = ""
+            val gemini = app.settings.aiProvider == "gemini"
             cz.stihnuto.panel.VoiceWake.recordUtterance(app) { pcm ->
-                app.main.post { mic.active = false; status.text = if (pcm == null) "Nic jsem neslyšel" else "Přepisuji…" }
+                app.main.post { mic.active = false; status.text = if (pcm == null) "Nic jsem neslyšel" else "Přemýšlím…" }
                 if (pcm == null) { cz.stihnuto.panel.VoiceWake.pause(false); return@recordUtterance }
+                if (gemini) {
+                    // Gemini odpovídá rovnou z nahrávky — jedno volání
+                    assistant(app).askAudio(pcm, "direct") { reply ->
+                        cz.stihnuto.panel.VoiceWake.log("odpověď: ${reply.take(60)}")
+                        cz.stihnuto.panel.VoiceWake.pause(false)
+                        app.main.post {
+                            if (reply.isNotBlank()) { you.text = ""; answer.text = reply; idle(); speak(reply) }
+                            else if (status.text == "Přemýšlím…") status.text = "Nerozuměl jsem, zkus to znovu"
+                        }
+                    }
+                    return@recordUtterance
+                }
+                // Claude odpovídá: Gemini nejdřív přepíše řeč na text
                 app.io.execute {
                     val text = try { cz.stihnuto.panel.Transcribe.text(app, pcm) } catch (e: Exception) { "" .also {
                         app.main.post { status.text = e.message ?: "Přepis selhal" } } }
                     cz.stihnuto.panel.VoiceWake.log("přepis Gemini: „$text“")
                     cz.stihnuto.panel.VoiceWake.pause(false)
-                    app.main.post { if (text.isNotBlank()) ask(text) else if (status.text == "Přepisuji…") status.text = "Nerozuměl jsem, zkus to znovu" }
+                    app.main.post { if (text.isNotBlank()) ask(text) else if (status.text == "Přemýšlím…") status.text = "Nerozuměl jsem, zkus to znovu" }
                 }
             }
             return

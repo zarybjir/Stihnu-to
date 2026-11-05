@@ -204,6 +204,96 @@ class Assistant(private val app: App) {
         return "Hotovo."
     }
 
+    /** Hlasový dotaz rovnou do Gemini (jedno volání: přepis + rozhodnutí + odpověď + akce). Async. */
+    fun askAudio(pcm: ShortArray, mode: String, done: (String) -> Unit) {
+        app.io.execute { done(answerAudio(pcm, mode)) }
+    }
+
+    /** Synchronní jádro. mode: direct (klepnutí) | phrase (aktivační slovo) | free. „" = nemluví na mě. */
+    fun answerAudio(pcm: ShortArray, mode: String): String {
+        val gate = when (mode) {
+            "phrase" -> "V nahrávce je řeč z místnosti u chytrých hodin. Proveď akci a odpověz JEN tehdy, když " +
+                "mluvčí řekne aktivační slovo „${app.settings.wakePhrase}“. Pokud ho neřekne, odpověz přesně slovem NIC a nevolej žádný nástroj."
+            "free" -> "V nahrávce je řeč z místnosti u chytrých hodin. Proveď akci a odpověz JEN tehdy, když mluvčí " +
+                "mluví na tebe (pokyn nebo otázka pro hodiny/asistenta). Jinak (hovor mezi lidmi, televize, telefon, zpěv) " +
+                "odpověz přesně slovem NIC a nevolej žádný nástroj."
+            else -> "V nahrávce je hlasový dotaz pro tebe. Splň ho a stručně odpověz."
+        }
+        val r = try {
+            askGeminiAudio(pcm, gate)
+        } catch (e: Exception) {
+            Log.w("Panel", "gemini audio", e)
+            synchronized(this) { gHistory.clear() }
+            e.message ?: "Nepovedlo se spojit s Gemini."
+        }
+        return if (r.trim().trim('.', '!', '?', '„', '“').equals("NIC", true)) "" else r
+    }
+
+    @Synchronized
+    private fun askGeminiAudio(pcm: ShortArray, gate: String): String {
+        val key = app.settings.geminiKey.trim()
+        if (key.isEmpty()) return "Nejdřív vlož klíč ke Gemini v nastavení na počítači."
+        val model = app.settings.geminiModel.trim().ifEmpty { "gemini-flash-lite-latest" }
+        if (System.currentTimeMillis() - gLastUse > 5 * 60_000L) gHistory.clear()
+        gLastUse = System.currentTimeMillis()
+
+        val userParts = JSONArray()
+            .put(JSONObject().put("text", gate))
+            .put(JSONObject().put("inlineData", JSONObject().put("mimeType", "audio/wav")
+                .put("data", android.util.Base64.encodeToString(cz.stihnuto.panel.Transcribe.wav(pcm), android.util.Base64.NO_WRAP))))
+        val work = mutableListOf<JSONObject>().apply { addAll(gHistory) }
+        val audioIdx = work.size
+        work += JSONObject().put("role", "user").put("parts", userParts)
+
+        var answer = "Hotovo."
+        repeat(6) {
+            val body = JSONObject()
+                .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemPrompt()))))
+                .put("contents", JSONArray(work))
+                .put("tools", JSONArray().put(JSONObject().put("functionDeclarations", GEMINI_TOOLS)))
+            val resp = geminiWithRetry(model, key, body)
+            val content = resp.optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")
+            if (content == null) {
+                gHistory.clear()
+                return if (resp.optJSONObject("promptFeedback") != null) "Tohle bohužel udělat nemůžu." else "Gemini neodpověděl."
+            }
+            if (!content.has("role")) content.put("role", "model")
+            work += content
+            val parts = content.optJSONArray("parts") ?: JSONArray()
+            val calls = (0 until parts.length()).mapNotNull { parts.optJSONObject(it)?.optJSONObject("functionCall") }
+            if (calls.isEmpty()) {
+                answer = (0 until parts.length()).mapNotNull { i ->
+                    parts.optJSONObject(i)?.takeIf { !it.optBoolean("thought") }?.optString("text")?.takeIf { it.isNotBlank() }
+                }.joinToString(" ").trim().ifEmpty { "Hotovo." }
+                persistAudio(work, audioIdx)
+                return answer
+            }
+            val results = JSONArray()
+            for (c in calls) {
+                val name = c.optString("name")
+                val args = c.optJSONObject("args") ?: JSONObject()
+                @Suppress("UNCHECKED_CAST")
+                val input = args.keys().asSequence().associateWith { k -> args.opt(k).let { v -> if (v == JSONObject.NULL) null else v } }
+                val out = try { runTool(name, input) } catch (e: Exception) { "Chyba: ${e.message}" }
+                results.put(JSONObject().put("functionResponse",
+                    JSONObject().put("name", name).put("response", JSONObject().put("result", out))))
+            }
+            work += JSONObject().put("role", "user").put("parts", results)
+        }
+        persistAudio(work, audioIdx)
+        return answer
+    }
+
+    /** Uloží rozhovor, ale velkou nahrávku nahradí textem, ať se při dalším dotazu nepřeposílá. */
+    private fun persistAudio(work: List<JSONObject>, audioIdx: Int) {
+        gHistory.clear()
+        work.forEachIndexed { i, turn ->
+            if (i == audioIdx) gHistory += JSONObject().put("role", "user")
+                .put("parts", JSONArray().put(JSONObject().put("text", "(hlasový dotaz)")))
+            else gHistory += turn
+        }
+    }
+
     /** Gemini bývá občas přetížený — místo dlouhého čekání to hned zkusit znovu, případně lehčím modelem. */
     private fun geminiWithRetry(model: String, key: String, body: JSONObject): JSONObject {
         val models = if (model == "gemini-flash-lite-latest") listOf(model, model) else listOf(model, "gemini-flash-lite-latest")
