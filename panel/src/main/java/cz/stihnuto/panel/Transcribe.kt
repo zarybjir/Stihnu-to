@@ -40,11 +40,11 @@ object Transcribe {
         val rule = if (free) """
             Asistent reaguje i bez oslovení. pro_asistenta = true, když jde o pokyn nebo otázku pro chytré hodiny
             či hlasového asistenta (počasí, čas, topení, hudba, nákupní seznam, kalendář, radar, minutka…) nebo když
-            ho mluvčí osloví jménem „Pepo“. pro_asistenta = false pro rozhovor mezi lidmi, televizi a rádio,
+            ho mluvčí osloví aktivačním slovem „$phrase“. pro_asistenta = false pro rozhovor mezi lidmi, televizi a rádio,
             telefonování, zpěv, poznámky pro sebe a věty bez jasného požadavku na asistenta.
         """ else """
-            pro_asistenta = true jen tehdy, když mluvčí osloví asistenta frází „$phrase“ nebo jménem Pepo
-            (i zkomoleně: Pepa, Pepu, Pepíku, „prosím tě Pepo“).
+            pro_asistenta = true jen tehdy, když mluvčí osloví asistenta slovem „$phrase“
+            (klidně i mírně zkomoleně nebo uprostřed věty).
         """
         val follow = if (followUp) "Asistent před chvílí odpovídal — navazující otázka nebo upřesnění k rozhovoru je pro asistenta." else ""
         val prompt = """

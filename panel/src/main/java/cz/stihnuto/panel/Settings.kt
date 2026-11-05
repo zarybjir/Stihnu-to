@@ -41,7 +41,7 @@ class Settings(ctx: Context) {
     var voiceWake: Boolean
         get() = p.getBoolean("voice_wake", false)
         set(v) { p.edit().putBoolean("voice_wake", v).apply() }
-    var wakePhrase: String by str("wake_phrase", "prosím Pepo")
+    var wakePhrase: String by str("wake_phrase", "prosím")
     /** vosk = fráze offline; gemini = fráze, poslouchá Gemini; free = bez fráze, Gemini pozná, že mluvíš na hodiny. */
     var voiceMode: String by str("voice_mode", "vosk")
     /** Vstup mikrofonu (MediaRecorder.AudioSource), vybraný testem mikrofonu. */
@@ -62,6 +62,11 @@ class Settings(ctx: Context) {
                 p.edit().putString("pages", saved.replaceFirst("clock", "clock,calendar")).apply()
             }
             p.edit().putInt("pages_version", 2).apply()
+        }
+        // aktivační slovo zjednodušeno na „prosím" (dřív „prosím Pepo")
+        if (p.getInt("wake_version", 1) < 2) {
+            if (p.getString("wake_phrase", null) == "prosím Pepo") p.edit().putString("wake_phrase", "prosím").apply()
+            p.edit().putInt("wake_version", 2).apply()
         }
         // noční ztlumení nově do 5:00 (dřív do 7:00)
         if (p.getInt("night_version", 1) < 2) {

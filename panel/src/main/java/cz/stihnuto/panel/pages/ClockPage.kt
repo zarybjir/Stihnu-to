@@ -119,12 +119,10 @@ class ClockPage(ctx: Context) : Page(ctx) {
 
             // --- souhrn dne pod časem
             wx?.days?.firstOrNull()?.let { d ->
-                val co2 = app.co2.co2?.takeIf { app.co2.fresh }
-                val info = listOfNotNull(
+                val info = listOf(
                     "dnes" to "${Ui.deg(d.max)} / ${Ui.deg(d.min)}",
                     "srážky" to "${Ui.num(d.precipSum)} mm",
                     "vítr" to "až ${Math.round(d.windMax)} km/h",
-                    co2?.let { "CO₂" to "$it ppm" },
                 )
                 val iw = (leftR - leftL) / info.size
                 // svisle doprostřed mezi čas (nebo událost) a spodní okraj

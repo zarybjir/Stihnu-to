@@ -47,13 +47,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- měřič CO₂ po zapojení: Android nabídne panel a povolí přístup -->
-            <intent-filter>
-                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
-            </intent-filter>
-            <meta-data
-                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
-                android:resource="@xml/usb_co2" />
         </activity>
 
         <!-- Vypnuté. Zapne se přes adb, když má panel nahradit domovskou obrazovku. -->

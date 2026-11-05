@@ -75,27 +75,6 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
         }
 
-        handleUsbAttach(intent)
-    }
-
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleUsbAttach(intent)
-    }
-
-    /**
-     * Když hodiny spustí panel kvůli připojenému USB (měřič CO₂), zařízení
-     * přijde v tomhle startu a panel k němu má přístup rovnou — bez systémového
-     * okna, které hodiny neumí zobrazit. Předáme ho měřiči.
-     */
-    private fun handleUsbAttach(intent: Intent?) {
-        if (intent?.action != android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) return
-        @Suppress("DEPRECATION")
-        val dev = intent.getParcelableExtra<android.hardware.usb.UsbDevice>(
-            android.hardware.usb.UsbManager.EXTRA_DEVICE
-        ) ?: return
-        app.co2.onAttached(dev)
     }
 
     private fun buildPages() {

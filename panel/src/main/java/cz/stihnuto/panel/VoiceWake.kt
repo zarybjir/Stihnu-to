@@ -14,7 +14,7 @@ import java.text.Normalizer
 import java.util.zip.ZipInputStream
 
 /**
- * Hlasová aktivace „prosím Pepo“: hodiny pořád poslouchají (offline, Vosk),
+ * Hlasová aktivace (aktivační slovo z nastavení): hodiny pořád poslouchají (offline, Vosk),
  * po aktivační frázi vezmou povel a pošlou ho Claudovi. Ven se posílá jen
  * samotný povel, nikdy nic jiného.
  */
@@ -338,12 +338,11 @@ object VoiceWake {
     private fun norm(s: String) = Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD)
         .replace(Regex("\\p{Mn}+"), "").replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
 
-    /** „prosím pepo“ → první slova celá, poslední jen začátek (Pepo/Pepa/Pepu…). */
+    /** Aktivační slovo z nastavení; shoda na začátek slov (rozpoznávání komolí konce). */
     private fun wakeRegex(app: App): Regex {
         val words = norm(app.settings.wakePhrase).split(' ').filter { it.isNotEmpty() }
         if (words.isEmpty()) return Regex("$^")
-        val parts = words.mapIndexed { i, w -> if (i == words.size - 1 && w.length >= 3) Regex.escape(w.take(1)) + "[a-z]{1,2}" + Regex.escape(w.substring(2, 3)) + "[a-z]*"
-            else if (i == words.size - 1) Regex.escape(w) + "[a-z]*" else Regex.escape(w) }
+        val parts = words.map { w -> Regex.escape(w.take(maxOf(4, w.length - 1))) + "[a-z]*" }
         return Regex("\\b" + parts.joinToString("\\s+(?:[a-z]+\\s+)?") + "\\b")
     }
 
@@ -353,7 +352,7 @@ object VoiceWake {
         if (!awaitingCommand && wakeRegex(app).containsMatchIn(norm(raw))) wake()
     }
 
-    /** Klepnutí na mikrofon: další věta je povel (bez „prosím Pepo“). */
+    /** Klepnutí na mikrofon: další věta je povel (bez aktivačního slova). */
     fun captureCommand(): Boolean {
         if (worker == null) return false
         pause(false)
@@ -377,7 +376,7 @@ object VoiceWake {
         val m = wakeRegex(app).find(n)
         val command: String? = when {
             m != null -> {
-                // povel může být hned za frází: „prosím Pepo, zatop v obýváku“
+                // povel může být hned za aktivačním slovem: „prosím, zatop v obýváku“
                 val words = text.split(Regex("\\s+"))
                 val skip = norm(n.substring(0, m.range.last + 1)).split(' ').size
                 words.drop(skip).joinToString(" ").trim().ifEmpty { null }.also { if (it == null) wake() }

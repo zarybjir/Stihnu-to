@@ -33,7 +33,6 @@ class App : Application() {
     lateinit var media: MediaRepo
     lateinit var calendar: CalendarRepo
     lateinit var radar: RadarRepo
-    lateinit var co2: Co2Meter
     lateinit var shopping: Shopping
     private var server: WebServer? = null
 
@@ -50,7 +49,6 @@ class App : Application() {
         media = MediaRepo(this)
         calendar = CalendarRepo(this)
         radar = RadarRepo(this)
-        co2 = Co2Meter(this)
         shopping = Shopping(this)
         Overlay.startWatchdog(this)
         main.postDelayed({ VoiceWake.start(this) }, 15_000)

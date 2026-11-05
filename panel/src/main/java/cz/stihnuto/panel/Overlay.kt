@@ -170,63 +170,6 @@ class PanelAccessibility : AccessibilityService() {
 
     override fun onInterrupt() {}
 
-    // --- povolení USB (měřič CO₂): systémové okno se na hodinách nemusí ukázat
-    // nad panelem — najdeme ho přes Usnadnění a potvrdíme sami.
-    private var usbUntil = 0L
-    private val seen = linkedSetOf<String>()
-
-    fun watchUsbDialog() {
-        val first = usbUntil < System.currentTimeMillis()
-        usbUntil = System.currentTimeMillis() + 20_000
-        if (first) { seen.clear(); handler.post { scanUsb() } }
-    }
-
-    private fun scanUsb() {
-        val co2 = App.instance.co2
-        if (System.currentTimeMillis() > usbUntil) {
-            co2.dialogNote(if (seen.isEmpty()) "systém žádné okno pro povolení neotevřel" else "okna: ${seen.joinToString()}")
-            return
-        }
-        try {
-            for (w in windows) {
-                val root = w.root ?: continue
-                val pkg = root.packageName?.toString() ?: continue
-                if (pkg == packageName) continue
-                seen += pkg + (if (android.os.Build.VERSION.SDK_INT >= 24) w.title?.let { " „$it“" } ?: "" else "")
-                if (pkg != "com.android.systemui" && pkg != "android" && !pkg.contains("usb")) continue
-                val texts = mutableListOf<String>()
-                fun walk(n: android.view.accessibility.AccessibilityNodeInfo?, d: Int) {
-                    if (n == null || d > 25) return
-                    n.text?.let { texts += it.toString() }
-                    for (i in 0 until n.childCount) walk(n.getChild(i), d + 1)
-                }
-                walk(root, 0)
-                val all = texts.joinToString(" ")
-                if (!Regex("USB|CH554|Panel|zařízení|device", RegexOption.IGNORE_CASE).containsMatchIn(all)) continue
-                co2.dialogNote("okno nalezeno: ${all.take(80)}")
-                // „Používat ve výchozím nastavení“ zaškrtnout, ať se příště neptá
-                fun boxes(n: android.view.accessibility.AccessibilityNodeInfo?, d: Int) {
-                    if (n == null || d > 25) return
-                    if (n.isCheckable && !n.isChecked) n.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
-                    for (i in 0 until n.childCount) boxes(n.getChild(i), d + 1)
-                }
-                boxes(root, 0)
-                for (label in listOf("OK", "Ok", "Povolit", "Allow", "Ano", "Yes", "Vždy", "Always")) {
-                    val b = root.findAccessibilityNodeInfosByText(label).firstOrNull { it.isClickable || it.parent?.isClickable == true }
-                        ?: continue
-                    (if (b.isClickable) b else b.parent).performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
-                    co2.dialogNote("potvrzeno tlačítkem „$label“")
-                    usbUntil = 0
-                    handler.postDelayed({ co2.connect() }, 1500)
-                    return
-                }
-            }
-        } catch (e: Exception) {
-            co2.dialogNote("chyba při hledání okna: ${e.message}")
-        }
-        handler.postDelayed({ scanUsb() }, 600)
-    }
-
     override fun onUnbind(intent: Intent?): Boolean {
         Overlay.hide()
         Overlay.service = null

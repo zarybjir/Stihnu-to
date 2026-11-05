@@ -87,7 +87,7 @@ class ClaudePage(ctx: Context) : Page(ctx) {
     private fun idle() {
         val noKey = if (app.settings.aiProvider == "gemini") app.settings.geminiKey.isBlank() else app.settings.anthropicKey.isBlank()
         status.text = if (noKey) "Nejdřív vlož klíč (Claude nebo Gemini) v nastavení"
-        else if (cz.stihnuto.panel.Transcribe.available(app) || SpeechRecognizer.isRecognitionAvailable(ctx) || cz.stihnuto.panel.VoiceWake.running) "Klepni a mluv, nebo řekni „prosím Pepo“"
+        else if (cz.stihnuto.panel.Transcribe.available(app) || SpeechRecognizer.isRecognitionAvailable(ctx) || cz.stihnuto.panel.VoiceWake.running) "Klepni a mluv, nebo řekni „${app.settings.wakePhrase}“"
         else "Zapni hlasovou aktivaci v okně Aplikace — pak půjde mluvit"
         mic.active = false
     }

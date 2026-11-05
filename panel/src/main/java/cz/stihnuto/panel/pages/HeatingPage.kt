@@ -49,8 +49,6 @@ class HeatingPage(ctx: Context) : Page(ctx) {
             render()
         },
             LinearLayout.LayoutParams(-2, -2).apply { rightMargin = (u * 2).toInt() })
-        if (repo.configured) header.addView(Ui.button(ctx, "Test cloudu", u * 4.2f) { cloudTest() },
-            LinearLayout.LayoutParams(-2, -2).apply { rightMargin = (u * 2).toInt() })
         header.addView(Ui.button(ctx, "Obnovit", u * 4.2f) { repo.refresh() })
         list.addView(header)
 
@@ -58,10 +56,6 @@ class HeatingPage(ctx: Context) : Page(ctx) {
             form = loginForm().also { list.addView(it) }
             return
         }
-        if (cloudLog.isNotEmpty()) list.addView(Ui.text(ctx, cloudLog, u * 3.6f, Ui.ACCENT).apply {
-            background = Ui.rounded(Ui.CARD, u * 2)
-            setPadding((u * 3).toInt(), (u * 2).toInt(), (u * 3).toInt(), (u * 2).toInt())
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
         repo.error?.let { list.addView(message(it)) }
         if (!repo.loaded) {
             list.addView(message("Načítám…"))

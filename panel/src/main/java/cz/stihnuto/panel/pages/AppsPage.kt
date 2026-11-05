@@ -49,27 +49,6 @@ class AppsPage(ctx: Context) : Page(ctx) {
         list.addView(diagRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1.5f).toInt() })
         list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
 
-        // měřič CO₂ přes USB
-        val m = app.co2
-        val cRow = LinearLayout(ctx).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            background = Ui.rounded(Ui.CARD, u * 3)
-            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
-        }
-        val cCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
-        cCol.addView(Ui.text(ctx, "Měřič CO₂ (USB)", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
-        val vals = listOfNotNull(
-            m.co2?.let { "$it ppm" }, m.temp?.let { "${Ui.num(it)} °C" }, m.humidity?.let { "${Math.round(it)} %" },
-        ).joinToString(" · ")
-        cCol.addView(Ui.text(ctx, if (vals.isNotEmpty()) "$vals — ${m.status}" else m.status, u * 3.8f,
-            if (m.fresh) Ui.GOOD else Ui.DIM))
-        if (m.probe.isNotEmpty()) cCol.addView(Ui.text(ctx, "Pokus: ${m.probe}", u * 3.4f, Ui.DIM))
-        if (m.raw.isNotEmpty()) cCol.addView(Ui.text(ctx, "Data: ${m.raw}", u * 3.2f, Ui.DIM).apply { maxLines = 2 })
-        cRow.addView(cCol, LinearLayout.LayoutParams(0, -2, 1f))
-        cRow.addView(Ui.button(ctx, "Připojit", u * 4.2f) { m.connect(); app.main.postDelayed({ render() }, 800) })
-        list.addView(cRow, LinearLayout.LayoutParams(-1, -2))
-        list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
-
         // nákup do Kuchapky v mobilu
         list.addView(shoppingBox())
         list.addView(View(ctx), LinearLayout.LayoutParams(1, (u * 4).toInt()))
@@ -179,9 +158,9 @@ class AppsPage(ctx: Context) : Page(ctx) {
         vCol.addView(Ui.text(ctx, when (mode) {
             "free" -> "Bez fráze: hodiny nahrají každou větu, Gemini ji přepíše a pozná, jestli mluvíš na ně. " +
                 "Každá věta v místnosti jde ke Googlu a čerpá bezplatný limit Gemini."
-            "gemini" -> "Řekni frázi a povel, např. „Pepo, přidej mléko“. Věty přepisuje Gemini (rozumí líp, " +
+            "gemini" -> "Řekni aktivační slovo a povel, např. „${app.settings.wakePhrase}, přidej mléko“. Věty přepisuje Gemini (rozumí líp, " +
                 "ale každá věta v místnosti jde ke Googlu)."
-            else -> "Řekni frázi a hned povel, např. „prosím Pepo, zatop v obýváku na 22“. Poslouchá se " +
+            else -> "Řekni aktivační slovo a hned povel, např. „${app.settings.wakePhrase}, zatop v obýváku na 22“. Poslouchá se " +
                 "přímo v hodinách (offline), Claudovi jde jen povel. Rozpoznává hůř."
         }, u * 3.8f, Ui.DIM))
         val modes = LinearLayout(ctx)
@@ -352,7 +331,7 @@ class AppsPage(ctx: Context) : Page(ctx) {
         if (s.items.any { it.taken }) top.addView(Ui.button(ctx, "Smazat převzaté", u * 4f) { s.clearTaken(); render() })
         box.addView(top)
         box.addView(Ui.text(ctx, "V Kuchapce: Nákup → Propojit s hodinami → opiš kód. Pak stačí říct " +
-            "„Pepo, přidej mléko a chleba“.", u * 3.8f, Ui.DIM),
+            "„${app.settings.wakePhrase}, přidej mléko a chleba“.", u * 3.8f, Ui.DIM),
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1).toInt() })
         box.addView(Ui.text(ctx, s.codePretty, u * 8f, Ui.PRIMARY, Ui.MEDIUM).apply { letterSpacing = 0.08f },
             LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
