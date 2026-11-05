@@ -119,32 +119,30 @@ class ClockPage(ctx: Context) : Page(ctx) {
 
             // --- souhrn dne pod časem
             wx?.days?.firstOrNull()?.let { d ->
-                val sun = if (d.sunset != null && now.isBefore(d.sunset)) "západ" to Ui.time(d.sunset)
-                else "východ" to (wx.days.getOrNull(1)?.sunrise?.let(Ui::time) ?: "–")
                 val co2 = app.co2.co2?.takeIf { app.co2.fresh }
                 val info = listOfNotNull(
                     "dnes" to "${Ui.deg(d.max)} / ${Ui.deg(d.min)}",
                     "srážky" to "${Ui.num(d.precipSum)} mm",
                     "vítr" to "až ${Math.round(d.windMax)} km/h",
-                    sun,
                     co2?.let { "CO₂" to "$it ppm" },
                 )
                 val iw = (leftR - leftL) / info.size
                 // svisle doprostřed mezi čas (nebo událost) a spodní okraj
                 val top = if (app.calendar.upcoming().isNotEmpty()) chipY + h * 0.045f else base
                 val bottom = h * 0.93f
-                val iy = top + (bottom - top - h * 0.1f) / 2 + h * 0.038f
-                // písmo hodnot se zmenší, kdyby se vedle sebe nevešly
-                var vs = h * 0.058f
+                val labelSize = h * 0.046f
+                val iy = top + (bottom - top - h * 0.12f) / 2 + h * 0.046f
+                // hodnoty větší, ať vyplní uvolněné místo; zmenší se, jen kdyby se nevešly
+                var vs = h * 0.078f
                 value2.textSize = vs
-                while (info.maxOf { value2.measureText(it.second) } > iw * 0.92f && vs > h * 0.03f) {
+                while (info.maxOf { value2.measureText(it.second) } > iw * 0.92f && vs > h * 0.04f) {
                     vs *= 0.95f; value2.textSize = vs
                 }
                 info.forEachIndexed { i, (label, value) ->
                     val x = leftL + iw * i + iw / 2
-                    small.textSize = h * 0.038f
+                    small.textSize = labelSize
                     c.drawText(label, x, iy, small)
-                    c.drawText(value, x, iy + h * 0.065f, value2)
+                    c.drawText(value, x, iy + h * 0.082f, value2)
                 }
             }
 
