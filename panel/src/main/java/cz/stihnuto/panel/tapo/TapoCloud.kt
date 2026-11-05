@@ -71,7 +71,11 @@ class TapoCloud(private val user: String, private val pass: String) {
                         JSONObject().put("deviceId", h.getString("deviceId")).put("requestData", req.toString()))
                 }
                 val rc = resp.optInt("error_code")
-                if (rc != 0) { log.append("dotaz na hub selhal: $rc ${resp.optString("msg")}\n"); continue }
+                if (rc != 0) {
+                    log.append("starý kanál: $rc ${resp.optString("msg")}\n")
+                    iotProbe(token, h.getString("deviceId"), log)
+                    continue
+                }
                 val data = resp.optJSONObject("result")?.opt("responseData")
                 val inner = when (data) {
                     is JSONObject -> data
@@ -95,6 +99,46 @@ class TapoCloud(private val user: String, private val pass: String) {
             }
         }
         return log.toString()
+    }
+
+    /**
+     * Novější kanál aplikací („IoT“, *.iot.i.tplinknbu.com): stav zařízení jako
+     * „shadow“ (reported/desired). Zatím jen průzkum — vypíše, co server vrátí.
+     */
+    private fun iotProbe(token: String, deviceId: String, log: StringBuilder) {
+        try {
+            val info = iotGet("https://app-server.iot.i.tplinknbu.com/v1/server-info", null)
+            val srv = info.second.let { try { JSONObject(it).optString("appServerUrl") } catch (e: Exception) { "" } }
+                .takeIf { it.startsWith("http") } ?: "https://euw1-app-server.iot.i.tplinknbu.com"
+            log.append("IoT server: $srv\n")
+            for (path in listOf(
+                "/v1/things/shadows?thingNames=" + URLEncoder.encode(deviceId, "UTF-8"),
+                "/v1/things/$deviceId",
+                "/v1/things?page=0&pageSize=20",
+            )) {
+                val (code, body) = iotGet(srv + path, token)
+                log.append("GET ${path.substringBefore('?')} → $code\n  ${body.replace(Regex("\\s+"), " ").take(500)}\n")
+            }
+        } catch (e: Exception) {
+            log.append("IoT chyba: ${e.message ?: e.javaClass.simpleName}\n")
+        }
+    }
+
+    private fun iotGet(url: String, token: String?): Pair<Int, String> {
+        fun once(pinned: Boolean): Pair<Int, String> {
+            val c = URL(url).openConnection() as HttpURLConnection
+            if (pinned && c is javax.net.ssl.HttpsURLConnection) c.sslSocketFactory = tplinkSsl
+            c.connectTimeout = 15000; c.readTimeout = 20000
+            c.setRequestProperty("app-cid", "app:x:x")
+            c.setRequestProperty("User-Agent", "Dalvik/2.1.0 (Linux; U; Android 14; Pixel Build/UP1A)")
+            if (token != null) c.setRequestProperty("Authorization", "ut|$token")
+            try {
+                val code = c.responseCode
+                val t = (if (code in 200..299) c.inputStream else c.errorStream)?.use { String(it.readBytes(), Charsets.UTF_8) } ?: ""
+                return code to t
+            } finally { c.disconnect() }
+        }
+        return try { once(true) } catch (e: javax.net.ssl.SSLException) { once(false) }
     }
 
     // ------------------------------------------------------------------
