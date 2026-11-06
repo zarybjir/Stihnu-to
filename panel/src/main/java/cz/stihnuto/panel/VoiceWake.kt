@@ -55,9 +55,9 @@ object VoiceWake {
     /** Hlasitost mikrofonu (RMS) za poslední chvíli — diagnostika. */
     @Volatile var level = 0
         private set
-    private var awaitingCommand = false
+    @Volatile private var awaitingCommand = false
     private var wakeAt = 0L
-    private var paused = false
+    @Volatile private var paused = false
     private var lastPartial = ""
     private var partialAt = 0L
     /** Jak dlouho ještě brát zvuk jako řeč (doznívání po poslední hlasité části). */
@@ -386,6 +386,7 @@ object VoiceWake {
         val am = app.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
         try {
             if (on) {
+                focusReq?.let { am.abandonAudioFocusRequest(it) } // uvolnit předchozí, ať se nehromadí
                 val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                     .setAudioAttributes(AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ASSISTANT)
