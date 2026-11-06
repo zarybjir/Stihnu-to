@@ -112,17 +112,18 @@ object VoiceWake {
                 for (i in 0 until n) sum += buf[i].toDouble() * buf[i]
                 count += n
                 if (count >= 8000) { level = Math.sqrt(sum / count).toInt(); sum = 0.0; count = 0 }
-                amplify(buf, n)
-                // krátká paměť zvuku (ať se při spuštění zachytí i začátek věty a slovo)
+                detectSpeech(buf, n)
+                val raw = buf.copyOf(n) // čistý zvuk pro nahrávky (Gemini)
                 if (geminiGate && !capturingGemini) {
-                    preroll.addLast(buf.copyOf(n)); while (preroll.size > 8) preroll.removeFirst()
+                    preroll.addLast(raw); while (preroll.size > 8) preroll.removeFirst()
                 }
-                capture?.let { if (it.feed(buf, n)) { capture = null; it.finish() } }
-                wakeCap?.let { if (it.feed(buf, n)) { capturingGemini = false; resetRecog = true; wakeCap = null; it.finish() } }
+                capture?.let { if (it.feed(raw, n)) { capture = null; it.finish() } }
+                wakeCap?.let { if (it.feed(raw, n)) { capturingGemini = false; resetRecog = true; wakeCap = null; it.finish() } }
                 if (paused) { autoCap = null; continue }
-                if (recognizer == null) { listenGemini(app, mode, buf, n); continue }
+                if (recognizer == null) { listenGemini(app, mode, raw, n); continue }
                 if (capturingGemini) continue // nahráváme povel pro Gemini, Vosk přeskoč
                 if (resetRecog) { recognizer.reset(); resetRecog = false; lastPartial = "" }
+                amplifyBuf(buf, n) // zesílit jen pro Vosk
                 if (recognizer.acceptWaveForm(buf, n)) {
                     handle(app, JSONObject(recognizer.result).optString("text"))
                     lastPartial = ""
@@ -160,20 +161,23 @@ object VoiceWake {
     /** Byl poslední úsek řeč? (hlasitější než šum v místnosti) */
     @Volatile private var speech = false
 
-    private fun amplify(buf: ShortArray, n: Int) {
+    /** Změří hlasitost, pozná řeč a upraví zesílení — zvuk nemění (Gemini dostane čistý). */
+    private fun detectSpeech(buf: ShortArray, n: Int) {
         var s = 0.0
         for (i in 0 until n) s += buf[i].toDouble() * buf[i]
         val rms = Math.sqrt(s / n)
         speech = rms > maxOf(noise * 1.8, 22.0)
         if (speech) {
-            // řeč dorovnat zhruba na 1800 (zbytek dorovná normalizace před odesláním Gemini)
             val target = (1800.0 / rms).coerceIn(1.0, 10.0)
             gain = gain * 0.7 + target * 0.3
         } else {
             noise = (noise * 0.97 + rms * 0.03).coerceAtMost(70.0)
         }
         if (speech) speechHold = 4 else if (speechHold > 0) speechHold--
-        // ticho se zesiluje jen mírně — jinak by z šumu vznikl „hlas“ a Vosk by nepoznal konec věty
+    }
+
+    /** Zesílí zvuk na místě — jen pro Vosk. Gemini dostává čistý zvuk (zesílí se až normalizací). */
+    private fun amplifyBuf(buf: ShortArray, n: Int) {
         val g = if (speech || speechHold > 0) gain else minOf(gain, 3.0)
         for (i in 0 until n) buf[i] = (buf[i] * g).toInt().coerceIn(-32768, 32767).toShort()
     }
@@ -196,12 +200,44 @@ object VoiceWake {
         }
         fun finish() {
             val bytes = out.toByteArray()
-            // i bez zjištěné řeči poslat — přepis pozná sám, jestli někdo mluvil
-            done(if (bytes.isNotEmpty()) java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-                .let { sb -> ShortArray(sb.remaining()).also { sb.get(it) } } else null)
+            val pcm = if (bytes.isNotEmpty()) java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                .let { sb -> ShortArray(sb.remaining()).also { sb.get(it) } } else null
+            if (pcm != null) lastPcm = pcm
+            done(pcm)
         }
     }
     @Volatile private var capture: Capture? = null
+    /** Poslední nahrávka (to, co dostal Gemini) — pro tlačítko „Přehrát". */
+    @Volatile var lastPcm: ShortArray? = null
+        private set
+
+    /** Přehraje poslední nahrávku nahlas, ať je slyšet, co mikrofon zachytil. */
+    fun playLast(app: App) {
+        val src = lastPcm ?: return
+        Thread({
+            val wasPaused = paused
+            pause(true)
+            var track: android.media.AudioTrack? = null
+            try {
+                val pcm = src.copyOf()
+                var peak = 1
+                for (v in pcm) { val a = Math.abs(v.toInt()); if (a > peak) peak = a }
+                val g = (24000.0 / peak).coerceIn(1.0, 20.0)
+                for (i in pcm.indices) pcm[i] = (pcm[i] * g).toInt().coerceIn(-32768, 32767).toShort()
+                val min = android.media.AudioTrack.getMinBufferSize(16000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
+                track = android.media.AudioTrack(AudioManager.STREAM_MUSIC, 16000, AudioFormat.CHANNEL_OUT_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT, maxOf(min, pcm.size * 2), android.media.AudioTrack.MODE_STATIC)
+                track.write(pcm, 0, pcm.size)
+                track.play()
+                Thread.sleep((pcm.size * 1000L / 16000) + 300)
+            } catch (e: Exception) {
+                Log.w("Panel", "playLast", e)
+            } finally {
+                try { track?.stop(); track?.release() } catch (_: Exception) {}
+                pause(wasPaused)
+            }
+        }, "play-rec").apply { isDaemon = true; start() }
+    }
 
     /** Ticho, po kterém je věta u konce (ms). */
     const val END_SILENCE_MS = 3000
@@ -323,7 +359,7 @@ object VoiceWake {
                 while (true) {
                     val n = rec.read(buf, 0, buf.size)
                     if (n <= 0) continue
-                    amplify(buf, n)
+                    detectSpeech(buf, n)
                     if (c.feed(buf, n)) break
                 }
                 c.finish()
