@@ -56,17 +56,19 @@ class ClockPage(ctx: Context) : Page(ctx) {
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
 
         override fun onDraw(c: Canvas) {
+            val app = App.instance
             val h = height.toFloat()
+            // s horní lištou je obrazovka nižší — velikost hodinovky ale drž jako bez ní
+            val hu = h + (if (app.settings.topBar) Ui.unit(context) * 12f else 0f)
             val w = width.toFloat()
             val pad = h * 0.06f
             val now = LocalDateTime.now()
-            val app = App.instance
             val wx = app.weather.data
 
             // --- vpravo úzký sloupec s předpovědí
             val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(if (app.settings.topBar) 9 else 10)
             val anyRain = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
-            val colW = if (hrs.isNullOrEmpty()) 0f else h * (if (anyRain) 0.47f else 0.31f)
+            val colW = if (hrs.isNullOrEmpty()) 0f else hu * (if (anyRain) 0.47f else 0.31f)
             val r1 = w - pad * 0.9f
             val r0 = r1 - colW
             val t0 = pad * 0.5f
@@ -161,22 +163,22 @@ class ClockPage(ctx: Context) : Page(ctx) {
                     fill.color = Ui.FAINT
                     c.drawRect(r0 + h * 0.02f, y, r1 - h * 0.02f, y + 1.5f, fill)
                 }
-                hourLabel.textSize = h * 0.042f
+                hourLabel.textSize = hu * 0.042f
                 hourLabel.color = if (i == 0) Ui.TEXT else Ui.DIM
-                c.drawText(if (i == 0) "nyní" else "${hr.time.hour}", r0 + h * 0.028f, m + h * 0.015f, hourLabel)
-                WeatherIcon.draw(c, hr.code, hr.isDay, r0 + h * 0.135f, m, h * 0.062f)
-                temp.textSize = h * 0.048f
-                c.drawText(Ui.deg(hr.temp), r0 + h * 0.26f, m + h * 0.017f, temp)
+                c.drawText(if (i == 0) "nyní" else "${hr.time.hour}", r0 + hu * 0.028f, m + hu * 0.015f, hourLabel)
+                WeatherIcon.draw(c, hr.code, hr.isDay, r0 + hu * 0.135f, m, hu * 0.062f)
+                temp.textSize = hu * 0.048f
+                c.drawText(Ui.deg(hr.temp), r0 + hu * 0.26f, m + hu * 0.017f, temp)
                 if (anyRain && (hr.precipProb >= 20 || hr.precip >= 0.1)) {
-                    rain.textSize = h * 0.035f
-                    c.drawText("${hr.precipProb}%", r0 + h * 0.365f, m + h * 0.013f, rain)
-                    mm.textSize = h * 0.032f
-                    c.drawText(Ui.num(hr.precip), r1 - h * 0.022f, m + h * 0.012f, mm)
+                    rain.textSize = hu * 0.035f
+                    c.drawText("${hr.precipProb}%", r0 + hu * 0.365f, m + hu * 0.013f, rain)
+                    mm.textSize = hu * 0.032f
+                    c.drawText(Ui.num(hr.precip), r1 - hu * 0.022f, m + hu * 0.012f, mm)
                 }
             }
             if (anyRain) {
-                legend.textSize = h * 0.022f
-                c.drawText("déšť · mm", r1 - h * 0.022f, t1 + h * 0.032f, legend)
+                legend.textSize = hu * 0.022f
+                c.drawText("déšť · mm", r1 - hu * 0.022f, t1 + hu * 0.032f, legend)
             }
         }
     }
