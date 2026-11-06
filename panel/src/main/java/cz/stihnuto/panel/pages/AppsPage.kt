@@ -189,10 +189,11 @@ class AppsPage(ctx: Context) : Page(ctx) {
             if (app.settings.voiceWake) { cz.stihnuto.panel.VoiceWake.stop(); app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.start(app) }, 600) }
             render()
         }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 2).toInt() })
-        if (cz.stihnuto.panel.VoiceWake.lastPcm != null)
-            micRow.addView(Ui.button(ctx, "Přehrát", u * 4f) { cz.stihnuto.panel.VoiceWake.playLast(app) },
-                LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 2).toInt() })
         vCol.addView(micRow, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
+        vCol.addView(Ui.button(ctx, "Přehrát poslední nahrávku", u * 4f) {
+            if (cz.stihnuto.panel.VoiceWake.lastPcm != null) cz.stihnuto.panel.VoiceWake.playLast(app)
+            else android.widget.Toast.makeText(ctx, "Nejdřív klepni na mikrofon a něco řekni.", android.widget.Toast.LENGTH_SHORT).show()
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
         vCol.addView(Ui.text(ctx, "Když to přes hudbu nebo potichu neslyší, zkus jiný vstup a pak řekni krátkou větu.", u * 3.4f, Ui.DIM))
         vRow.addView(vCol, LinearLayout.LayoutParams(0, -2, 1f))
         vRow.addView(Ui.button(ctx, if (vw) "Vypnout" else "Zapnout", u * 4.5f,
