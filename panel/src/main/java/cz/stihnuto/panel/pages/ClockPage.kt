@@ -64,7 +64,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
             val wx = app.weather.data
 
             // --- vpravo úzký sloupec s předpovědí
-            val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(10)
+            val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(if (app.settings.topBar) 9 else 10)
             val anyRain = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
             val colW = if (hrs.isNullOrEmpty()) 0f else h * (if (anyRain) 0.47f else 0.31f)
             val r1 = w - pad * 0.9f

@@ -16,6 +16,10 @@ class Settings(ctx: Context) {
     /** Odkazy na kalendáře ve formátu iCal (.ics), každý na nový řádek. */
     var calendarUrls: String by str("calendar_urls", "")
     var homePage: String by str("home_page", "clock")
+    /** Horní lišta s kartami pro rychlé přepínání oken. */
+    var topBar: Boolean
+        get() = p.getBoolean("top_bar", false)
+        set(v) { p.edit().putBoolean("top_bar", v).apply() }
     /** Po kolika minutách bez dotyku se vrátit na domovské okno (0 = nikdy). */
     var idleMinutes: Int by int("idle_minutes", 3)
 

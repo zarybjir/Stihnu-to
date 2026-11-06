@@ -23,8 +23,10 @@ import kotlin.math.abs
 
 class MainActivity : Activity() {
     private val app get() = App.instance
+    private val TOP_BAR_U = 12f
     private lateinit var pager: Pager
     private lateinit var dots: Dots
+    private lateinit var topBar: TopBar
     private var ids: List<String> = emptyList()
     private val pages = mutableMapOf<String, Page>()
     private var index = 0
@@ -45,17 +47,23 @@ class MainActivity : Activity() {
             onSwipe = { dir -> show((index + dir + ids.size) % ids.size, dir) }
             onTouchAny = { resetIdle() }
         }
+        val u = Ui.unit(this)
         root.addView(pager, FrameLayout.LayoutParams(-1, -1).apply {
             // displej hodin kousek obrazu vpravo schová pod rámeček
             rightMargin = (resources.displayMetrics.widthPixels * 0.035f).toInt()
         })
         dots = Dots(this) { i -> show(i, if (i > index) 1 else -1) }
-        val u = Ui.unit(this)
         root.addView(dots, FrameLayout.LayoutParams(-1, (u * 6).toInt(), Gravity.BOTTOM))
+        topBar = TopBar(this).apply { onPick = { i -> show(i, if (i > index) 1 else -1) } }
+        root.addView(topBar, FrameLayout.LayoutParams(-1, (u * TOP_BAR_U).toInt(), Gravity.TOP).apply {
+            rightMargin = (resources.displayMetrics.widthPixels * 0.035f).toInt()
+        })
         setContentView(root)
+        applyTopBar()
 
         app.navigator = { id ->
             if (id == "__reload__") buildPages()
+            else if (id == "__topbar__") { applyTopBar(); topBar.set(ids, index) }
             else ids.indexOf(id).takeIf { it >= 0 }?.let { show(it, if (it > index) 1 else -1) }
         }
         buildPages()
@@ -89,7 +97,19 @@ class MainActivity : Activity() {
             pager.addView(p.view, FrameLayout.LayoutParams(-1, -1))
         }
         index = ids.indexOf(app.settings.homePage).coerceAtLeast(0)
+        applyTopBar()
         show(index, 0)
+    }
+
+    /** Zapne/vypne horní lištu a posune obsah pod ni. */
+    private fun applyTopBar() {
+        if (!::topBar.isInitialized) return
+        val on = app.settings.topBar
+        val u = Ui.unit(this)
+        topBar.visibility = if (on) View.VISIBLE else View.GONE
+        dots.visibility = if (on) View.GONE else View.VISIBLE
+        (pager.layoutParams as FrameLayout.LayoutParams).topMargin = if (on) (u * TOP_BAR_U).toInt() else 0
+        pager.requestLayout()
     }
 
     private fun show(newIndex: Int, dir: Int) {
@@ -116,6 +136,7 @@ class MainActivity : Activity() {
         }
         new.onShow()
         dots.set(ids.size, index)
+        topBar.set(ids, index)
         resetIdle()
     }
 

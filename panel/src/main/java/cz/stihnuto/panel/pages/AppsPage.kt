@@ -287,6 +287,21 @@ class AppsPage(ctx: Context) : Page(ctx) {
 
     private fun renderWindows() {
         list.addView(Ui.text(ctx, "Okna", u * 7, Ui.TEXT, Ui.MEDIUM))
+        // horní lišta s kartami pro rychlé přepínání
+        val tbRow = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 2.5f).toInt(), (u * 3).toInt(), (u * 2.5f).toInt())
+        }
+        val on0 = app.settings.topBar
+        tbRow.addView(Ui.text(ctx, "Horní lišta s kartami", u * 4.8f, Ui.TEXT, Ui.MEDIUM), LinearLayout.LayoutParams(0, -2, 1f))
+        tbRow.addView(Ui.button(ctx, if (on0) "Zapnuto" else "Vypnuto", u * 4.2f,
+            if (on0) Ui.PRIMARY else Ui.CARD_HI, if (on0) Ui.BG else Ui.TEXT) {
+            app.settings.topBar = !on0
+            app.navigator?.invoke("__topbar__")
+            render()
+        })
+        list.addView(tbRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 1.5f).toInt(); bottomMargin = (u * 1.5f).toInt() })
         list.addView(Ui.text(ctx, "Šipkami změníš pořadí, ★ = domovské okno, vypnutá se nezobrazují. Okno Aplikace je vždy poslední.",
             u * 3.8f, Ui.DIM), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = (u * 1).toInt() })
         val (on, off) = windowOrder()
