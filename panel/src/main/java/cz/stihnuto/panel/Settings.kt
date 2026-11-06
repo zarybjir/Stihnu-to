@@ -59,8 +59,8 @@ class Settings(ctx: Context) {
     var dayBrightness: Int by int("day_brightness", 0)
     var nightFrom: Int by int("night_from", 22)
     var nightTo: Int by int("night_to", 5)
-    /** Jas v noci 1–100 %, 0 = neměnit. */
-    var nightBrightness: Int by int("night_brightness", 8)
+    /** Jas v noci 1–100 %, 0 = neměnit (noční ztlumení vypnuto). */
+    var nightBrightness: Int by int("night_brightness", 0)
 
     /** Okno Aplikace je vždy poslední — přes něj jdou aktualizace. */
     init {
@@ -70,6 +70,10 @@ class Settings(ctx: Context) {
                 p.edit().putString("pages", saved.replaceFirst("clock", "clock,calendar")).apply()
             }
             p.edit().putInt("pages_version", 2).apply()
+        }
+        // noční ztlumení podsvícení zrušeno
+        if (p.getInt("night_version", 1) < 3) {
+            p.edit().putInt("night_brightness", 0).putInt("night_version", 3).apply()
         }
         // aktivační slovo zjednodušeno na „prosím" (dřív „prosím Pepo")
         if (p.getInt("wake_version", 1) < 2) {
