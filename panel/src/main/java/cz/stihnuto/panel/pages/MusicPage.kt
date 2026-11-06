@@ -35,7 +35,7 @@ class MusicPage(ctx: Context) : Page(ctx) {
     private val artist = Ui.text(ctx, "", u * 5.5f, Ui.DIM).apply {
         maxLines = 1; ellipsize = TextUtils.TruncateAt.END
     }
-    private val play = IconButton(ctx, IconButton.PLAY, u * 20) { app.media.command("toggle") }
+    private val play = IconButton(ctx, IconButton.PLAY, u * 18) { app.media.command("toggle") }
     private val volume = Ui.text(ctx, "", u * 5f, Ui.DIM).apply { gravity = Gravity.CENTER }
     // přehrávací tlačítka (fungují jen s přístupem k přehrávání); hlasitost jde vždy
     private val transport = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -45,7 +45,7 @@ class MusicPage(ctx: Context) : Page(ctx) {
     private val onMedia = { update() }
 
     init {
-        val side = (u * 60).toInt()
+        val side = (u * 48).toInt()
         root.addView(art, LinearLayout.LayoutParams(side, side))
 
         val col = LinearLayout(ctx).apply {
@@ -56,18 +56,18 @@ class MusicPage(ctx: Context) : Page(ctx) {
         col.addView(title, lp(top = u * 1.5f))
         col.addView(artist, lp(top = u * 1.5f))
 
-        transport.addView(IconButton(ctx, IconButton.PREV, u * 15) { app.media.command("previous") })
+        transport.addView(IconButton(ctx, IconButton.PREV, u * 13) { app.media.command("previous") })
         transport.addView(play, LinearLayout.LayoutParams(-2, -2).apply {
             leftMargin = (u * 3).toInt(); rightMargin = (u * 3).toInt()
         })
-        transport.addView(IconButton(ctx, IconButton.NEXT, u * 15) { app.media.command("next") })
+        transport.addView(IconButton(ctx, IconButton.NEXT, u * 13) { app.media.command("next") })
         controls.addView(transport)
         controls.addView(View(ctx), LinearLayout.LayoutParams(0, 1, 1f))
-        controls.addView(Ui.button(ctx, "−", u * 7) { app.media.command("volume_down"); update() },
-            LinearLayout.LayoutParams((u * 14).toInt(), (u * 14).toInt()))
-        controls.addView(volume, LinearLayout.LayoutParams((u * 16).toInt(), -2))
-        controls.addView(Ui.button(ctx, "+", u * 7) { app.media.command("volume_up"); update() },
-            LinearLayout.LayoutParams((u * 14).toInt(), (u * 14).toInt()))
+        controls.addView(Ui.button(ctx, "−", u * 6.5f) { app.media.command("volume_down"); update() },
+            LinearLayout.LayoutParams((u * 12).toInt(), (u * 12).toInt()).apply { leftMargin = (u * 1.5f).toInt() })
+        controls.addView(volume, LinearLayout.LayoutParams((u * 13).toInt(), -2))
+        controls.addView(Ui.button(ctx, "+", u * 6.5f) { app.media.command("volume_up"); update() },
+            LinearLayout.LayoutParams((u * 12).toInt(), (u * 12).toInt()).apply { leftMargin = (u * 1).toInt() })
         col.addView(controls, lp(top = u * 6))
         col.addView(launch, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 6).toInt() })
 

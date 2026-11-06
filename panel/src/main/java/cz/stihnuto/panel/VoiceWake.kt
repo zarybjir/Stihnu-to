@@ -166,7 +166,7 @@ object VoiceWake {
         var s = 0.0
         for (i in 0 until n) s += buf[i].toDouble() * buf[i]
         val rms = Math.sqrt(s / n)
-        speech = rms > maxOf(noise * 1.8, 22.0)
+        speech = rms > maxOf(noise * 1.6, 15.0)
         if (speech) {
             val target = (1800.0 / rms).coerceIn(1.0, 10.0)
             gain = gain * 0.7 + target * 0.3
@@ -375,16 +375,8 @@ object VoiceWake {
 
     /** Zapne potlačení ozvěny (vlastní reproduktor hodin) a šumu na nahrávání. */
     private fun attachEffects(sessionId: Int): List<android.media.audiofx.AudioEffect> {
-        val out = mutableListOf<android.media.audiofx.AudioEffect>()
-        try {
-            if (android.media.audiofx.AcousticEchoCanceler.isAvailable())
-                android.media.audiofx.AcousticEchoCanceler.create(sessionId)?.also { it.enabled = true; out += it }
-        } catch (e: Exception) { Log.w("Panel", "aec", e) }
-        try {
-            if (android.media.audiofx.NoiseSuppressor.isAvailable())
-                android.media.audiofx.NoiseSuppressor.create(sessionId)?.also { it.enabled = true; out += it }
-        } catch (e: Exception) { Log.w("Panel", "ns", e) }
-        return out
+        // Potlačení ozvěny/šumu na tomhle mikrofonu spíš škodilo (vynulovalo zvuk) — vypnuto.
+        return emptyList()
     }
 
     private var focusReq: AudioFocusRequest? = null
