@@ -85,9 +85,10 @@ object VoiceWake {
         var fx: List<android.media.audiofx.AudioEffect> = emptyList()
         try {
             val mode = app.settings.voiceMode
-            val gem = mode != "vosk"
-            if (gem && app.settings.geminiKey.isBlank()) throw IllegalStateException("tenhle režim potřebuje klíč ke Gemini (okno Aplikace → Asistent)")
-            val recognizer = if (gem) null else {
+            if (mode != "vosk" && app.settings.geminiKey.isBlank()) throw IllegalStateException("tenhle režim potřebuje klíč ke Gemini (okno Aplikace → Asistent)")
+            geminiGate = mode == "gemini"
+            // „free" = bez fráze (vše ke Gemini); „vosk" i „gemini" hlídají slovo offline Voskem
+            val recognizer = if (mode == "free") null else {
                 if (!modelReady(app)) download(app)
                 status = "Načítám model…"
                 Recognizer(model ?: Model(modelPath(app)).also { model = it }, 16000f)
@@ -112,9 +113,16 @@ object VoiceWake {
                 count += n
                 if (count >= 8000) { level = Math.sqrt(sum / count).toInt(); sum = 0.0; count = 0 }
                 amplify(buf, n)
+                // krátká paměť zvuku (ať se při spuštění zachytí i začátek věty a slovo)
+                if (geminiGate && !capturingGemini) {
+                    preroll.addLast(buf.copyOf(n)); while (preroll.size > 8) preroll.removeFirst()
+                }
                 capture?.let { if (it.feed(buf, n)) { capture = null; it.finish() } }
+                wakeCap?.let { if (it.feed(buf, n)) { capturingGemini = false; resetRecog = true; wakeCap = null; it.finish() } }
                 if (paused) { autoCap = null; continue }
                 if (recognizer == null) { listenGemini(app, mode, buf, n); continue }
+                if (capturingGemini) continue // nahráváme povel pro Gemini, Vosk přeskoč
+                if (resetRecog) { recognizer.reset(); resetRecog = false; lastPartial = "" }
                 if (recognizer.acceptWaveForm(buf, n)) {
                     handle(app, JSONObject(recognizer.result).optString("text"))
                     lastPartial = ""
@@ -123,9 +131,8 @@ object VoiceWake {
                     val now = System.currentTimeMillis()
                     if (p != lastPartial) { lastPartial = p; partialAt = now }
                     partial(app, p)
-                    // Vosk někdy větu neukončí (šum v místnosti) — když se rozpoznaný
-                    // text 1,2 s nemění, bereme ho jako hotový
-                    if (p.isNotBlank() && now - partialAt > 1200 &&
+                    // Vosk někdy větu neukončí (šum) — po 1,2 s beze změny ber jako hotové (jen offline režim)
+                    if (!geminiGate && p.isNotBlank() && now - partialAt > 1200 &&
                         (awaitingCommand || wakeRegex(app).containsMatchIn(norm(p)))
                     ) {
                         handle(app, JSONObject(recognizer.finalResult).optString("text").ifBlank { p })
@@ -140,6 +147,7 @@ object VoiceWake {
             status = "Hlasová aktivace nejde spustit: ${e.message ?: e.javaClass.simpleName}"
             if (worker === Thread.currentThread()) worker = null
         } finally {
+            geminiGate = false; capturingGemini = false; wakeCap = null
             fx.forEach { try { it.release() } catch (_: Exception) {} }
             try { rec?.stop(); rec?.release() } catch (_: Exception) {}
         }
@@ -202,6 +210,11 @@ object VoiceWake {
     private var autoCap: Capture? = null
     private val preroll = java.util.ArrayDeque<ShortArray>()
     @Volatile private var gemBusy = false
+    // režim „Fráze + Gemini": Vosk zdarma pohlídá slovo, povel pak nahraje a pošle Gemini
+    @Volatile private var geminiGate = false
+    private var wakeCap: Capture? = null
+    @Volatile private var capturingGemini = false
+    @Volatile private var resetRecog = false
     /** Chvíli po odpovědi bere i navazující větu bez fráze. */
     @Volatile private var followUpUntil = 0L
 
@@ -262,6 +275,33 @@ object VoiceWake {
                 gemBusy = false
             }
         }
+    }
+
+    /** Vosk slyšel aktivační slovo → nahraj zbytek věty a pošli ji Gemini (režim „Fráze + Gemini"). */
+    private fun startGeminiWake(app: App) {
+        capturingGemini = true
+        onWake?.invoke()
+        log("Vosk slyšel slovo → nahrávám pro Gemini")
+        val c = Capture(12_000) { pcm ->
+            if (pcm != null) {
+                gemBusy = true
+                app.io.execute {
+                    try {
+                        val reply = cz.stihnuto.panel.pages.ClaudePage.assistant(app).answerAudio(pcm, "direct")
+                        if (reply.isNotBlank()) {
+                            lastHeard = reply; lastHeardAt = System.currentTimeMillis()
+                            log("odpověď: ${reply.take(60)}")
+                            onAnswer?.invoke(reply)
+                        } else log("Gemini nic nevrátil")
+                    } catch (e: Exception) {
+                        log("Gemini: ${e.message}")
+                    } finally { gemBusy = false }
+                }
+            }
+        }
+        preroll.forEach { c.feed(it, it.size) }
+        preroll.clear()
+        wakeCap = c
     }
 
     /** Nahraje jednu větu z mikrofonu (i když hlasová aktivace neběží). null = nic neřekl. */
@@ -410,7 +450,9 @@ object VoiceWake {
     private fun partial(app: App, rawIn: String) {
         val raw = rawIn.replace("[unk]", " ").replace(Regex("\\s+"), " ").trim()
         if (raw.isNotBlank()) { lastHeard = raw; lastHeardAt = System.currentTimeMillis() }
-        if (!awaitingCommand && wakeRegex(app).containsMatchIn(norm(raw))) wake()
+        if (!awaitingCommand && !capturingGemini && wakeRegex(app).containsMatchIn(norm(raw))) {
+            if (geminiGate) startGeminiWake(app) else wake()
+        }
     }
 
     /** Klepnutí na mikrofon: další věta je povel (bez aktivačního slova). */
@@ -429,6 +471,7 @@ object VoiceWake {
     }
 
     private fun handle(app: App, raw: String) {
+        if (geminiGate) return // povel řeší Gemini z nahrávky
         val text = raw.replace("[unk]", " ").replace(Regex("\\s+"), " ").trim()
         if (text.isNotEmpty()) log("věta: „$text“")
         if (text.isNotEmpty()) { lastHeard = text; lastHeardAt = System.currentTimeMillis() }

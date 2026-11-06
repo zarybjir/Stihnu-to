@@ -158,8 +158,8 @@ class AppsPage(ctx: Context) : Page(ctx) {
         vCol.addView(Ui.text(ctx, when (mode) {
             "free" -> "Bez fráze: hodiny nahrají každou větu, Gemini ji přepíše a pozná, jestli mluvíš na ně. " +
                 "Každá věta v místnosti jde ke Googlu a čerpá bezplatný limit Gemini."
-            "gemini" -> "Řekni aktivační slovo a povel, např. „${app.settings.wakePhrase}, přidej mléko“. Věty přepisuje Gemini (rozumí líp, " +
-                "ale každá věta v místnosti jde ke Googlu)."
+            "gemini" -> "Slovo „${app.settings.wakePhrase}“ pohlídá offline Vosk (zdarma), a teprve pak pošle větu Gemini, " +
+                "který rozumí líp. Televize ani běžný hovor Gemini nespustí."
             else -> "Řekni aktivační slovo a hned povel, např. „${app.settings.wakePhrase}, zatop v obýváku na 22“. Poslouchá se " +
                 "přímo v hodinách (offline), Claudovi jde jen povel. Rozpoznává hůř."
         }, u * 3.8f, Ui.DIM))
