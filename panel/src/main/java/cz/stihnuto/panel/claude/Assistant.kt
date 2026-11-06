@@ -329,7 +329,9 @@ class Assistant(private val app: App) {
                 val msg = try { JSONObject(text).optJSONObject("error")?.optString("message") } catch (e: Exception) { null }
                 throw java.io.IOException(when (code) {
                     400, 401, 403 -> "Gemini odmítl dotaz ($code). Zkontroluj klíč a název modelu. ${msg ?: ""}".trim()
-                    429 -> "Vyčerpaný bezplatný limit Gemini, zkus to později."
+                    429 -> if (msg?.contains("PerDay", true) == true || msg?.contains("per day", true) == true)
+                        "Gemini: denní limit vyčerpán, zkus to zítra."
+                    else "Gemini zahlcený (limit za minutu), zkus to za chvilku."
                     503 -> "Gemini je přetížený (503). ${msg ?: ""}".trim()
                     else -> "Gemini vrátil chybu $code. ${msg ?: ""}".trim()
                 })

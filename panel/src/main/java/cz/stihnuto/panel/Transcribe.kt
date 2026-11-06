@@ -89,7 +89,9 @@ object Transcribe {
                 val code = c.responseCode
                 val t = (if (code in 200..299) c.inputStream else c.errorStream)?.use { String(it.readBytes(), Charsets.UTF_8) } ?: ""
                 if (code == 503) { last = java.io.IOException("Gemini je přetížený"); return@repeat }
-                if (code == 429) throw java.io.IOException("Gemini: vyčerpaný denní limit")
+                if (code == 429) throw java.io.IOException(
+                    if (t.contains("PerDay", true) || t.contains("per day", true)) "Gemini: denní limit vyčerpán, zkus to zítra."
+                    else "Gemini zahlcený (limit za minutu), zkus to za chvilku.")
                 if (code !in 200..299) throw java.io.IOException("Přepis řeči selhal ($code)")
                 val parts = JSONObject(t).optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts")
                     ?: return ""
