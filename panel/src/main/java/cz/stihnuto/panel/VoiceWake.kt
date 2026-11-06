@@ -164,13 +164,13 @@ object VoiceWake {
         var s = 0.0
         for (i in 0 until n) s += buf[i].toDouble() * buf[i]
         val rms = Math.sqrt(s / n)
-        speech = rms > maxOf(noise * 2.0, 30.0)
+        speech = rms > maxOf(noise * 1.8, 22.0)
         if (speech) {
-            // řeč dorovnat zhruba na 2200 (mírněji, ať se nepřebudí a nerozpadne pro rozpoznání)
-            val target = (2200.0 / rms).coerceIn(1.0, 18.0)
+            // řeč dorovnat zhruba na 1800 (zbytek dorovná normalizace před odesláním Gemini)
+            val target = (1800.0 / rms).coerceIn(1.0, 10.0)
             gain = gain * 0.7 + target * 0.3
         } else {
-            noise = noise * 0.95 + rms * 0.05
+            noise = (noise * 0.97 + rms * 0.03).coerceAtMost(70.0)
         }
         if (speech) speechHold = 4 else if (speechHold > 0) speechHold--
         // ticho se zesiluje jen mírně — jinak by z šumu vznikl „hlas“ a Vosk by nepoznal konec věty
@@ -204,7 +204,7 @@ object VoiceWake {
     @Volatile private var capture: Capture? = null
 
     /** Ticho, po kterém je věta u konce (ms). */
-    const val END_SILENCE_MS = 2000
+    const val END_SILENCE_MS = 3000
 
     // --- režimy přes Gemini: hodiny samy poznají začátek řeči, větu nahrají a pošlou na přepis
     private var autoCap: Capture? = null

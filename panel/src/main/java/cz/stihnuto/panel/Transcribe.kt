@@ -14,6 +14,7 @@ object Transcribe {
     fun available(app: App) = app.settings.geminiKey.isNotBlank()
 
     fun wav(pcm: ShortArray): ByteArray {
+        normalize(pcm)
         val data = java.nio.ByteBuffer.allocate(pcm.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
         pcm.forEach { data.putShort(it) }
         val d = data.array()
@@ -22,6 +23,16 @@ object Transcribe {
         h.put("fmt ".toByteArray()).putInt(16).putShort(1).putShort(1).putInt(16000).putInt(32000).putShort(2).putShort(16)
         h.put("data".toByteArray()).putInt(d.size)
         return h.array() + d
+    }
+
+    /** Vyrovná hlasitost nahrávky na plný rozsah (ať je tichý mikrofon hodin dobře slyšet). */
+    private fun normalize(pcm: ShortArray) {
+        var peak = 1
+        for (s in pcm) { val a = Math.abs(s.toInt()); if (a > peak) peak = a }
+        if (peak < 150) return // nejspíš ticho — nezesilovat šum
+        val gain = (26000.0 / peak).coerceIn(1.0, 20.0)
+        if (gain <= 1.05) return
+        for (i in pcm.indices) pcm[i] = (pcm[i] * gain).toInt().coerceIn(-32768, 32767).toShort()
     }
 
     /** Vrátí přepsaný text, nebo vyhodí výjimku se srozumitelnou zprávou. */
