@@ -36,10 +36,11 @@ class TopBar(ctx: Context) : View(ctx) {
             val x = i * tw
             val on = i == current
             if (on) {
-                p.color = Ui.PRIMARY
+                p.style = Paint.Style.STROKE; p.strokeWidth = u * 0.35f; p.color = Ui.PRIMARY
                 c.drawRoundRect(RectF(x + u * 0.8f, u * 1.3f, x + tw - u * 0.8f, height - u * 1.3f), u * 2.4f, u * 2.4f, p)
+                p.style = Paint.Style.FILL
             }
-            val col = if (on) Ui.BG else Ui.DIM
+            val col = if (on) Ui.PRIMARY else Ui.DIM
             icon(c, id, x + tw / 2, height * 0.37f, u * 2.0f, col)
             p.color = col
             p.typeface = if (on) Ui.MEDIUM else Typeface.DEFAULT

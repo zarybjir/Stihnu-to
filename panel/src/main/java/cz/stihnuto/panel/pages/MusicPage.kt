@@ -85,10 +85,14 @@ class MusicPage(ctx: Context) : Page(ctx) {
     private fun update() {
         val m = app.media
         val playing = !m.permissionMissing && m.title != null
-        // přehrávací tlačítka a název skladby jen když panel vidí, co hraje
-        transport.gone(m.permissionMissing)
+        // přehrávací tlačítka fungují i bez oprávnění (mediální tlačítka), tak je ukaž vždy
+        transport.gone(false)
         title.text = if (playing) m.title else "Hudba"
-        artist.text = if (playing) m.artist ?: "" else ""
+        artist.text = when {
+            playing -> m.artist ?: ""
+            m.permissionMissing -> "název skladby zapneš jen přes počítač; ovládání funguje"
+            else -> "nic nehraje"
+        }
         appLabel.text = if (playing) m.appName?.let { "Hraje v: $it" } ?: "" else ""
         art.set(if (playing) m.art else null)
         play.icon = if (m.isPlaying) IconButton.PAUSE else IconButton.PLAY

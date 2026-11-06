@@ -69,18 +69,18 @@ class ClockPage(ctx: Context) : Page(ctx) {
             val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(if (app.settings.topBar) 9 else 10)
             val anyRain = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
             val colW = if (hrs.isNullOrEmpty()) 0f else hu * (if (anyRain) 0.47f else 0.31f)
-            val r1 = w - pad * 0.9f
+            val r1 = w - pad * 0.3f
             val r0 = r1 - colW
             val t0 = pad * 0.5f
             val t1 = h - pad * 0.9f
 
             // --- vlevo čas, velikost podle dostupné šířky (číslice Roboto mají stejnou šířku)
-            val leftR = r0 - pad * 0.35f
-            val leftL = pad * 0.25f
+            val leftR = r0 - pad * 0.25f
+            val leftL = pad * 0.1f
             val cx = leftL + (leftR - leftL) / 2
             val hh = "${now.hour}"
             val mmText = ":%02d".format(now.minute)
-            var size = h * 0.6f
+            var size = h * 0.66f
             fun total(): Float {
                 hours.textSize = size; minutes.textSize = size
                 return hours.measureText("00") + minutes.measureText(":00")

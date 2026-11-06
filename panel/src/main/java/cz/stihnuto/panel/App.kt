@@ -421,15 +421,23 @@ class MediaRepo(app: App) : Repo(app) {
         when (action) {
             "volume_up" -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
             "volume_down" -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
-            "play" -> t?.play() ?: return false
-            "pause" -> t?.pause() ?: return false
-            "toggle" -> (if (isPlaying) t?.pause() else t?.play()) ?: return false
-            "next" -> t?.skipToNext() ?: return false
-            "previous" -> t?.skipToPrevious() ?: return false
+            "play" -> if (t != null) t.play() else mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PLAY)
+            "pause" -> if (t != null) t.pause() else mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PAUSE)
+            "toggle" -> if (t != null) { if (isPlaying) t.pause() else t.play() } else mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            "next" -> if (t != null) t.skipToNext() else mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_NEXT)
+            "previous" -> if (t != null) t.skipToPrevious() else mediaKey(android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS)
             else -> return false
         }
         app.main.postDelayed({ notifyChanged() }, 400)
         return true
+    }
+
+    /** Pošle mediální tlačítko (play/pauza/další) — funguje i bez oprávnění ke čtení přehrávání. */
+    private fun mediaKey(code: Int) {
+        try {
+            audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code))
+            audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code))
+        } catch (e: Exception) {}
     }
 
     val volumePercent get() =
