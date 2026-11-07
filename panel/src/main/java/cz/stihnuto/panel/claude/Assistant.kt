@@ -354,6 +354,7 @@ class Assistant(private val app: App) {
             („přidej chleba“ = položka „chleba“, „zatop“ = 22 °C, „pusť něco“ = oblíbený mix).
             Ptej se jen tehdy, když by bez odpovědi šlo opravdu udělat něco špatně.
             Text pochází z rozpoznávání řeči a může obsahovat zkomolená slova — domysli, co bylo nejspíš myšleno.
+            Když tě někdo požádá o vtip, řekni krátký původní ČESKÝ vtip nebo slovní hříčku, která funguje v češtině — nikdy ne překlad z angličtiny.
             Na běžné otázky odpověz rovnou z přehledu níže. get_status volej jen, když potřebuješ podrobnosti
             (hodinová předpověď, další dny, kalendář na delší dobu).
             Okna panelu: $pages.

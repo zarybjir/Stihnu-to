@@ -16,6 +16,8 @@ class Settings(ctx: Context) {
     /** Odkazy na kalendáře ve formátu iCal (.ics), každý na nový řádek. */
     var calendarUrls: String by str("calendar_urls", "")
     var homePage: String by str("home_page", "clock")
+    /** Pořadí zabudovaných vtipů (první = „Brutopýr"). */
+    var jokeIndex: Int by int("joke_index", 0)
     /** Horní lišta s kartami pro rychlé přepínání oken. */
     var topBar: Boolean
         get() = p.getBoolean("top_bar", false)

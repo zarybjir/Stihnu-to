@@ -58,10 +58,11 @@ class ClaudePage(ctx: Context) : Page(ctx) {
         listOf(
             listOf("Jak bude zítra?", "Bude dnes pršet?"),
             listOf("Kde se topí?", "Pusť hudbu"),
+            listOf("Vtip", "Kolik je hodin?"),
         ).forEach { row ->
             val r = LinearLayout(ctx)
             row.forEachIndexed { i, q ->
-                r.addView(Ui.button(ctx, q, u * 4f) { ask(q) },
+                r.addView(Ui.button(ctx, q, u * 4f) { if (q == "Vtip") tellJoke() else ask(q) },
                     LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = (u * 2).toInt() })
             }
             chips.addView(r, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
@@ -181,7 +182,17 @@ class ClaudePage(ctx: Context) : Page(ctx) {
         r.startListening(intent)
     }
 
+    /** Zabudovaný český vtip (lepší než překlady z AI). */
+    private fun tellJoke() {
+        val j = cz.stihnuto.panel.Jokes.next(app)
+        you.text = "Vtip"
+        answer.text = j
+        idle()
+        speak(j)
+    }
+
     fun ask(text: String) {
+        if (cz.stihnuto.panel.Jokes.isRequest(text)) { tellJoke(); return }
         cz.stihnuto.panel.VoiceWake.log("ptám se: „$text“")
         you.text = "„$text“"
         answer.text = ""
