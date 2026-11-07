@@ -233,11 +233,7 @@ object VoiceWake {
             var track: android.media.AudioTrack? = null
             try {
                 val pcm = src.copyOf()
-                cz.stihnuto.panel.Transcribe.highPass(pcm, 16000, 90.0)
-                var peak = 1
-                for (v in pcm) { val a = Math.abs(v.toInt()); if (a > peak) peak = a }
-                val g = (24000.0 / peak).coerceIn(1.0, 20.0)
-                for (i in pcm.indices) pcm[i] = (pcm[i] * g).toInt().coerceIn(-32768, 32767).toShort()
+                cz.stihnuto.panel.Transcribe.prepare(pcm) // stejná úprava jako pro Gemini
                 val min = android.media.AudioTrack.getMinBufferSize(16000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
                 track = android.media.AudioTrack(AudioManager.STREAM_MUSIC, 16000, AudioFormat.CHANNEL_OUT_MONO,
                     AudioFormat.ENCODING_PCM_16BIT, maxOf(min, pcm.size * 2), android.media.AudioTrack.MODE_STATIC)

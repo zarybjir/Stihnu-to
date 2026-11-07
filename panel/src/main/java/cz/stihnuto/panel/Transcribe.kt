@@ -13,9 +13,14 @@ import java.net.URL
 object Transcribe {
     fun available(app: App) = app.settings.geminiKey.isNotBlank()
 
-    fun wav(pcm: ShortArray): ByteArray {
+    /** Ořez hukotu + vyrovnání hlasitosti — stejně pro Gemini i pro přehrání. */
+    fun prepare(pcm: ShortArray) {
         highPass(pcm, 16000, 90.0)
         normalize(pcm)
+    }
+
+    fun wav(pcm: ShortArray): ByteArray {
+        prepare(pcm)
         val data = java.nio.ByteBuffer.allocate(pcm.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
         pcm.forEach { data.putShort(it) }
         val d = data.array()
@@ -41,12 +46,17 @@ object Transcribe {
         }
     }
 
-    /** Vyrovná hlasitost nahrávky na plný rozsah (ať je tichý mikrofon hodin dobře slyšet). */
+    /**
+     * Vyrovná hlasitost nahrávky. Řídí se 95. percentilem (hladinou hlasu), ne špičkou —
+     * jediné lupnutí/prasknutí jinak celou nahrávku ztlumí a hlas v ní zanikne.
+     */
     private fun normalize(pcm: ShortArray) {
-        var peak = 1
-        for (s in pcm) { val a = Math.abs(s.toInt()); if (a > peak) peak = a }
-        if (peak < 150) return // nejspíš ticho — nezesilovat šum
-        val gain = (24000.0 / peak).coerceIn(1.0, 12.0)
+        if (pcm.isEmpty()) return
+        val abs = IntArray(pcm.size) { Math.abs(pcm[it].toInt()) }
+        abs.sort()
+        val level = abs[(abs.size * 95 / 100).coerceIn(0, abs.size - 1)]
+        if (level < 40) return // nejspíš ticho — nezesilovat šum
+        val gain = (9000.0 / level).coerceIn(1.0, 30.0)
         if (gain <= 1.05) return
         for (i in pcm.indices) pcm[i] = (pcm[i] * gain).toInt().coerceIn(-32768, 32767).toShort()
     }
