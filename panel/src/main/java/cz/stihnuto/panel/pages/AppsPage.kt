@@ -194,6 +194,9 @@ class AppsPage(ctx: Context) : Page(ctx) {
             if (cz.stihnuto.panel.VoiceWake.lastPcm != null) cz.stihnuto.panel.VoiceWake.playLast(app)
             else android.widget.Toast.makeText(ctx, "Nejdřív klepni na mikrofon a něco řekni.", android.widget.Toast.LENGTH_SHORT).show()
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
+        cz.stihnuto.panel.VoiceWake.lastStats().takeIf { it.isNotEmpty() }?.let {
+            vCol.addView(Ui.text(ctx, it, u * 3.4f, Ui.DIM))
+        }
         vCol.addView(Ui.text(ctx, "Když to přes hudbu nebo potichu neslyší, zkus jiný vstup a pak řekni krátkou větu.", u * 3.4f, Ui.DIM))
         vRow.addView(vCol, LinearLayout.LayoutParams(0, -2, 1f))
         vRow.addView(Ui.button(ctx, if (vw) "Vypnout" else "Zapnout", u * 4.5f,

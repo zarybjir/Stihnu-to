@@ -14,6 +14,7 @@ object Transcribe {
     fun available(app: App) = app.settings.geminiKey.isNotBlank()
 
     fun wav(pcm: ShortArray): ByteArray {
+        highPass(pcm, 16000, 90.0)
         normalize(pcm)
         val data = java.nio.ByteBuffer.allocate(pcm.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
         pcm.forEach { data.putShort(it) }
@@ -25,12 +26,27 @@ object Transcribe {
         return h.array() + d
     }
 
+    /** Odečte hluboký hukot a stejnosměrnou složku (ty se jinak zesílí na „vrčení"). */
+    fun highPass(pcm: ShortArray, fs: Int, fc: Double) {
+        val rc = 1.0 / (2 * Math.PI * fc)
+        val dt = 1.0 / fs
+        val a = rc / (rc + dt)
+        var prevX = 0.0
+        var prevY = 0.0
+        for (i in pcm.indices) {
+            val x = pcm[i].toDouble()
+            val y = a * (prevY + x - prevX)
+            prevX = x; prevY = y
+            pcm[i] = y.toInt().coerceIn(-32768, 32767).toShort()
+        }
+    }
+
     /** Vyrovná hlasitost nahrávky na plný rozsah (ať je tichý mikrofon hodin dobře slyšet). */
     private fun normalize(pcm: ShortArray) {
         var peak = 1
         for (s in pcm) { val a = Math.abs(s.toInt()); if (a > peak) peak = a }
         if (peak < 150) return // nejspíš ticho — nezesilovat šum
-        val gain = (26000.0 / peak).coerceIn(1.0, 20.0)
+        val gain = (24000.0 / peak).coerceIn(1.0, 12.0)
         if (gain <= 1.05) return
         for (i in pcm.indices) pcm[i] = (pcm[i] * gain).toInt().coerceIn(-32768, 32767).toShort()
     }

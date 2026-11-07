@@ -43,6 +43,15 @@ object VoiceWake {
     }
     fun events(): List<String> = synchronized(events) { events.toList() }
 
+    /** Stav poslední nahrávky (délka, špička, hladina) — pro diagnostiku mikrofonu. */
+    fun lastStats(): String {
+        val pcm = lastPcm ?: return ""
+        var peak = 0; var sum = 0.0
+        for (v in pcm) { val a = Math.abs(v.toInt()); if (a > peak) peak = a; sum += a.toDouble() * a }
+        val rms = Math.sqrt(sum / pcm.size).toInt()
+        return "nahrávka ${pcm.size * 1000 / 16000} ms · špička $peak · hladina $rms · $lastInfo"
+    }
+
     /** Okno Claude se přihlásí, aby povel zobrazilo a odpověď přečetlo nahlas. */
     var onCommand: ((String) -> Unit)? = null
     /** Volá se, když zazní aktivační fráze (zobrazit „Poslouchám…“). */
@@ -54,6 +63,9 @@ object VoiceWake {
     @Volatile private var worker: Thread? = null
     /** Hlasitost mikrofonu (RMS) za poslední chvíli — diagnostika. */
     @Volatile var level = 0
+        private set
+    /** Info o posledním nahrávání (vstup, frekvence, kanály) — diagnostika. */
+    @Volatile var lastInfo = ""
         private set
     @Volatile private var awaitingCommand = false
     private var wakeAt = 0L
@@ -99,6 +111,7 @@ object VoiceWake {
             if (rec.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("mikrofon (vstup $src) nejde otevřít")
             rec.startRecording()
             fx = attachEffects(rec.audioSessionId)
+            lastInfo = "${MicProbe.name(src)}, ${rec.sampleRate} Hz, ${rec.channelCount} kan."
             status = when (mode) {
                 "free" -> "Poslouchám vše, Gemini pozná, kdy mluvíš na mě (vstup ${MicProbe.name(src)})"
                 "gemini" -> "Poslouchám na „${app.settings.wakePhrase}“ přes Gemini (vstup ${MicProbe.name(src)})"
@@ -220,6 +233,7 @@ object VoiceWake {
             var track: android.media.AudioTrack? = null
             try {
                 val pcm = src.copyOf()
+                cz.stihnuto.panel.Transcribe.highPass(pcm, 16000, 90.0)
                 var peak = 1
                 for (v in pcm) { val a = Math.abs(v.toInt()); if (a > peak) peak = a }
                 val g = (24000.0 / peak).coerceIn(1.0, 20.0)
@@ -355,6 +369,7 @@ object VoiceWake {
                     AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 16000))
                 rec.startRecording()
                 fx = attachEffects(rec.audioSessionId)
+                lastInfo = "${MicProbe.name(app.settings.micSource)}, ${rec.sampleRate} Hz, ${rec.channelCount} kan."
                 val buf = ShortArray(1600)
                 while (true) {
                     val n = rec.read(buf, 0, buf.size)
