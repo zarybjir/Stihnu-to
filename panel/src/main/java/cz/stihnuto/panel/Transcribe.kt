@@ -47,16 +47,16 @@ object Transcribe {
     }
 
     /**
-     * Vyrovná hlasitost nahrávky. Řídí se 95. percentilem (hladinou hlasu), ne špičkou —
-     * jediné lupnutí/prasknutí jinak celou nahrávku ztlumí a hlas v ní zanikne.
+     * Vyrovná hlasitost nahrávky mírně, podle průměru (RMS) — jako původní funkční způsob.
+     * Řízení podle špičky i velké zesílení dělalo z tichého šumu „přebuzené vrčení".
      */
     private fun normalize(pcm: ShortArray) {
         if (pcm.isEmpty()) return
-        val abs = IntArray(pcm.size) { Math.abs(pcm[it].toInt()) }
-        abs.sort()
-        val level = abs[(abs.size * 95 / 100).coerceIn(0, abs.size - 1)]
-        if (level < 40) return // nejspíš ticho — nezesilovat šum
-        val gain = (9000.0 / level).coerceIn(1.0, 30.0)
+        var sum = 0.0
+        for (s in pcm) sum += s.toDouble() * s
+        val rms = Math.sqrt(sum / pcm.size)
+        if (rms < 20) return // nejspíš ticho — nezesilovat šum
+        val gain = (2000.0 / rms).coerceIn(1.0, 12.0)
         if (gain <= 1.05) return
         for (i in pcm.indices) pcm[i] = (pcm[i] * gain).toInt().coerceIn(-32768, 32767).toShort()
     }

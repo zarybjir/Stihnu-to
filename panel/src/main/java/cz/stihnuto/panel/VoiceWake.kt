@@ -245,7 +245,7 @@ object VoiceWake {
                     if (n <= 0) break
                     off += n
                 }
-                Thread.sleep(300)
+                Thread.sleep(700) // nechat doznít poslední buffer, ať se konec neusekne
             } catch (e: Exception) {
                 Log.w("Panel", "playLast", e)
             } finally {
