@@ -41,6 +41,72 @@ object MicProbe {
     @Volatile var running = false
         private set
 
+    /**
+     * Chytrý test: u každého vstupu nahraje, co řekneš, nechá to přepsat Gemini
+     * a vybere ten, kterému nejlíp rozumí (ne ten nejhlasitější). Bez klíče ke
+     * Gemini spadne na obyčejný test hlasitosti.
+     */
+    fun smartTest(app: App, done: () -> Unit) {
+        if (running) return
+        if (!Transcribe.available(app)) { run(app, done); return }
+        running = true
+        val wasOn = VoiceWake.running
+        VoiceWake.stop()
+        Thread({
+            Thread.sleep(500)
+            val lines = mutableListOf<String>()
+            var best = -1
+            var bestScore = 0
+            for (src in sources) {
+                result = "Mluv (třeba „jedna dva tři“) — zkouším vstup „${name(src)}“…"
+                app.main.post(done)
+                val pcm = record(src, 2800)
+                if (pcm == null) { lines += "${name(src)}: nejde otevřít"; continue }
+                val text = try { Transcribe.text(app, pcm) } catch (e: Exception) { "" }
+                val score = text.count { it.isLetterOrDigit() }
+                lines += "${name(src)}: " + if (text.isBlank()) "—" else "„$text“"
+                if (score > bestScore) { bestScore = score; best = src }
+            }
+            result = if (best >= 0 && bestScore >= 2) {
+                app.settings.micSource = best
+                "Nejlíp rozuměl vstup „${name(best)}“ ✓\n" + lines.joinToString("\n")
+            } else {
+                "Zatím žádný vstup nerozuměl — zkus to v tichu a mluv zřetelně.\n" + lines.joinToString("\n")
+            }
+            running = false
+            if (wasOn || app.settings.voiceWake) VoiceWake.start(app)
+            app.main.post(done)
+        }, "mic-smart").apply { isDaemon = true; start() }
+    }
+
+    /** Nahraje `ms` milisekund z daného vstupu. */
+    private fun record(src: Int, ms: Int): ShortArray? {
+        var rec: AudioRecord? = null
+        return try {
+            val min = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            rec = AudioRecord(src, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 16000))
+            if (rec.state != AudioRecord.STATE_INITIALIZED) return null
+            rec.startRecording()
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ShortArray(1600)
+            val end = System.currentTimeMillis() + ms
+            while (System.currentTimeMillis() < end) {
+                val n = rec.read(buf, 0, buf.size)
+                if (n > 0) {
+                    val bb = java.nio.ByteBuffer.allocate(n * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                    for (i in 0 until n) bb.putShort(buf[i])
+                    out.write(bb.array())
+                }
+            }
+            val bytes = out.toByteArray()
+            ShortArray(bytes.size / 2).also { java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(it) }
+        } catch (e: Exception) {
+            null
+        } finally {
+            try { rec?.stop(); rec?.release() } catch (_: Exception) {}
+        }
+    }
+
     /** Spustí test (asi 10 s). Během něj mluv u hodin. */
     fun run(app: App, done: () -> Unit) {
         if (running) return

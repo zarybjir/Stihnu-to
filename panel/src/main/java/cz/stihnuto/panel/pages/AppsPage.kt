@@ -181,8 +181,8 @@ class AppsPage(ctx: Context) : Page(ctx) {
         voiceStatus = Ui.text(ctx, cz.stihnuto.panel.VoiceWake.status, u * 3.8f, Ui.ACCENT)
         vCol.addView(voiceStatus)
         val micRow = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
-        micRow.addView(Ui.button(ctx, if (cz.stihnuto.panel.MicProbe.running) "Testuji…" else "Test mikrofonu", u * 4f) {
-            cz.stihnuto.panel.MicProbe.run(app) { refreshStatuses() }
+        micRow.addView(Ui.button(ctx, if (cz.stihnuto.panel.MicProbe.running) "Testuji…" else "Chytrý test (mluv)", u * 4f) {
+            cz.stihnuto.panel.MicProbe.smartTest(app) { refreshStatuses() }
         })
         micRow.addView(Ui.button(ctx, "Jiný vstup (${cz.stihnuto.panel.MicProbe.name(app.settings.micSource)})", u * 4f) {
             app.settings.micSource = cz.stihnuto.panel.MicProbe.nextSource(app.settings.micSource)
