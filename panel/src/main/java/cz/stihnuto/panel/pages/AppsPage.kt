@@ -34,6 +34,22 @@ class AppsPage(ctx: Context) : Page(ctx) {
     private fun render() {
         list.removeAllViews()
         statusViews.clear()
+        // rychlá aktualizace a hlas nahoru (ať se nemusí rolovat)
+        Updater.catalog.firstOrNull { it.key == "panel" }?.let { panel ->
+            val pv = Updater.installedVersion(ctx, panel.packageName)
+            val uRow = LinearLayout(ctx).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                background = Ui.rounded(Ui.CARD, u * 3)
+                setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+            }
+            val uCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            uCol.addView(Ui.text(ctx, "Panel" + (pv?.let { "  ·  $it" } ?: ""), u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+            val ust = Ui.text(ctx, "", u * 4f, Ui.ACCENT); statusViews[panel.key] = ust; uCol.addView(ust)
+            uRow.addView(uCol, LinearLayout.LayoutParams(0, -2, 1f))
+            uRow.addView(Ui.button(ctx, "Aktualizovat", u * 4.5f, Ui.ACCENT, Ui.BG) { Updater.install(app, panel) })
+            list.addView(uRow)
+        }
+        list.addView(voiceBox(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt(); bottomMargin = (u * 2).toInt() })
         // adresa nastavení pro PC / mobil
         val ips = cz.stihnuto.panel.web.WebServer.localIps()
         list.addView(Ui.text(ctx, "Nastavení v prohlížeči (stejná WiFi):", u * 4f, Ui.DIM))
@@ -146,66 +162,6 @@ class AppsPage(ctx: Context) : Page(ctx) {
             list.addView(kRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
         }
 
-        val vw = app.settings.voiceWake
-        val vRow = LinearLayout(ctx).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            background = Ui.rounded(Ui.CARD, u * 3)
-            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
-        }
-        val vCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
-        vCol.addView(Ui.text(ctx, "Hlasová aktivace „${app.settings.wakePhrase}“", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
-        val mode = app.settings.voiceMode
-        vCol.addView(Ui.text(ctx, when (mode) {
-            "free" -> "Bez fráze: hodiny nahrají každou větu, Gemini ji přepíše a pozná, jestli mluvíš na ně. " +
-                "Každá věta v místnosti jde ke Googlu a čerpá bezplatný limit Gemini."
-            "gemini" -> "Slovo „${app.settings.wakePhrase}“ pohlídá offline Vosk (zdarma), a teprve pak pošle větu Gemini, " +
-                "který rozumí líp. Televize ani běžný hovor Gemini nespustí."
-            else -> "Řekni aktivační slovo a hned povel, např. „${app.settings.wakePhrase}, zatop v obýváku na 22“. Poslouchá se " +
-                "přímo v hodinách (offline), Claudovi jde jen povel. Rozpoznává hůř."
-        }, u * 3.8f, Ui.DIM))
-        val modes = LinearLayout(ctx)
-        listOf("vosk" to "Fráze offline", "gemini" to "Fráze + Gemini", "free" to "Bez fráze").forEachIndexed { i, (k, label) ->
-            val on = mode == k
-            modes.addView(Ui.button(ctx, label, u * 4f, if (on) Ui.ACCENT else Ui.CARD_HI, if (on) Ui.BG else Ui.TEXT) {
-                if (app.settings.voiceMode != k) {
-                    app.settings.voiceMode = k
-                    if (app.settings.voiceWake) {
-                        cz.stihnuto.panel.VoiceWake.stop()
-                        app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.start(app) }, 700)
-                    }
-                    render()
-                }
-            }, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) leftMargin = (u * 2).toInt() })
-        }
-        vCol.addView(modes, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
-        voiceStatus = Ui.text(ctx, cz.stihnuto.panel.VoiceWake.status, u * 3.8f, Ui.ACCENT)
-        vCol.addView(voiceStatus)
-        val micRow = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
-        micRow.addView(Ui.button(ctx, if (cz.stihnuto.panel.MicProbe.running) "Testuji…" else "Chytrý test (mluv)", u * 4f) {
-            cz.stihnuto.panel.MicProbe.smartTest(app) { refreshStatuses() }
-        })
-        micRow.addView(Ui.button(ctx, "Jiný vstup (${cz.stihnuto.panel.MicProbe.name(app.settings.micSource)})", u * 4f) {
-            app.settings.micSource = cz.stihnuto.panel.MicProbe.nextSource(app.settings.micSource)
-            if (app.settings.voiceWake) { cz.stihnuto.panel.VoiceWake.stop(); app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.start(app) }, 600) }
-            render()
-        }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 2).toInt() })
-        vCol.addView(micRow, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
-        vCol.addView(Ui.button(ctx, "Přehrát poslední nahrávku", u * 4f) {
-            if (cz.stihnuto.panel.VoiceWake.lastPcm != null) cz.stihnuto.panel.VoiceWake.playLast(app)
-            else android.widget.Toast.makeText(ctx, "Nejdřív klepni na mikrofon a něco řekni.", android.widget.Toast.LENGTH_SHORT).show()
-        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
-        cz.stihnuto.panel.VoiceWake.lastStats().takeIf { it.isNotEmpty() }?.let {
-            vCol.addView(Ui.text(ctx, it, u * 3.4f, Ui.DIM))
-        }
-        vCol.addView(Ui.text(ctx, "Když to přes hudbu nebo potichu neslyší, zkus jiný vstup a pak řekni krátkou větu.", u * 3.4f, Ui.DIM))
-        vRow.addView(vCol, LinearLayout.LayoutParams(0, -2, 1f))
-        vRow.addView(Ui.button(ctx, if (vw) "Vypnout" else "Zapnout", u * 4.5f,
-            if (vw) Ui.CARD_HI else Ui.ACCENT, if (vw) Ui.TEXT else Ui.BG) {
-            app.settings.voiceWake = !vw
-            if (!vw) cz.stihnuto.panel.VoiceWake.start(app) else cz.stihnuto.panel.VoiceWake.stop()
-            render()
-        })
-        list.addView(vRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt() })
 
         val ovl = cz.stihnuto.panel.Overlay.allowed(ctx)
         val ovlRow = LinearLayout(ctx).apply {
@@ -286,6 +242,71 @@ class AppsPage(ctx: Context) : Page(ctx) {
         if (app.settings.homePage !in on) app.settings.homePage = on.firstOrNull() ?: "clock"
         windowsChanged = true
         render()
+    }
+
+
+    /** Sekce hlasové aktivace a mikrofonu (dává se nahoru, ať se k ní nemusí rolovat). */
+    private fun voiceBox(): View {
+        val vw = app.settings.voiceWake
+        val vRow = LinearLayout(ctx).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = Ui.rounded(Ui.CARD, u * 3)
+            setPadding((u * 4).toInt(), (u * 3).toInt(), (u * 3).toInt(), (u * 3).toInt())
+        }
+        val vCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        vCol.addView(Ui.text(ctx, "Hlasová aktivace „${app.settings.wakePhrase}“", u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+        val mode = app.settings.voiceMode
+        vCol.addView(Ui.text(ctx, when (mode) {
+            "free" -> "Bez fráze: hodiny nahrají každou větu, Gemini ji přepíše a pozná, jestli mluvíš na ně. " +
+                "Každá věta v místnosti jde ke Googlu a čerpá bezplatný limit Gemini."
+            "gemini" -> "Slovo „${app.settings.wakePhrase}“ pohlídá offline Vosk (zdarma), a teprve pak pošle větu Gemini, " +
+                "který rozumí líp. Televize ani běžný hovor Gemini nespustí."
+            else -> "Řekni aktivační slovo a hned povel, např. „${app.settings.wakePhrase}, zatop v obýváku na 22“. Poslouchá se " +
+                "přímo v hodinách (offline), Claudovi jde jen povel. Rozpoznává hůř."
+        }, u * 3.8f, Ui.DIM))
+        val modes = LinearLayout(ctx)
+        listOf("vosk" to "Fráze offline", "gemini" to "Fráze + Gemini", "free" to "Bez fráze").forEachIndexed { i, (k, label) ->
+            val on = mode == k
+            modes.addView(Ui.button(ctx, label, u * 4f, if (on) Ui.ACCENT else Ui.CARD_HI, if (on) Ui.BG else Ui.TEXT) {
+                if (app.settings.voiceMode != k) {
+                    app.settings.voiceMode = k
+                    if (app.settings.voiceWake) {
+                        cz.stihnuto.panel.VoiceWake.stop()
+                        app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.start(app) }, 700)
+                    }
+                    render()
+                }
+            }, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) leftMargin = (u * 2).toInt() })
+        }
+        vCol.addView(modes, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
+        voiceStatus = Ui.text(ctx, cz.stihnuto.panel.VoiceWake.status, u * 3.8f, Ui.ACCENT)
+        vCol.addView(voiceStatus)
+        val micRow = LinearLayout(ctx).apply { gravity = Gravity.CENTER_VERTICAL }
+        micRow.addView(Ui.button(ctx, if (cz.stihnuto.panel.MicProbe.running) "Testuji…" else "Chytrý test (mluv)", u * 4f) {
+            cz.stihnuto.panel.MicProbe.smartTest(app) { refreshStatuses() }
+        })
+        micRow.addView(Ui.button(ctx, "Jiný vstup (${cz.stihnuto.panel.MicProbe.name(app.settings.micSource)})", u * 4f) {
+            app.settings.micSource = cz.stihnuto.panel.MicProbe.nextSource(app.settings.micSource)
+            if (app.settings.voiceWake) { cz.stihnuto.panel.VoiceWake.stop(); app.main.postDelayed({ cz.stihnuto.panel.VoiceWake.start(app) }, 600) }
+            render()
+        }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = (u * 2).toInt() })
+        vCol.addView(micRow, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
+        vCol.addView(Ui.button(ctx, "Přehrát poslední nahrávku", u * 4f) {
+            if (cz.stihnuto.panel.VoiceWake.lastPcm != null) cz.stihnuto.panel.VoiceWake.playLast(app)
+            else android.widget.Toast.makeText(ctx, "Nejdřív klepni na mikrofon a něco řekni.", android.widget.Toast.LENGTH_SHORT).show()
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = (u * 1.5f).toInt() })
+        cz.stihnuto.panel.VoiceWake.lastStats().takeIf { it.isNotEmpty() }?.let {
+            vCol.addView(Ui.text(ctx, it, u * 3.4f, Ui.DIM))
+        }
+        vCol.addView(Ui.text(ctx, "Když to přes hudbu nebo potichu neslyší, zkus jiný vstup a pak řekni krátkou větu.", u * 3.4f, Ui.DIM))
+        vRow.addView(vCol, LinearLayout.LayoutParams(0, -2, 1f))
+        vRow.addView(Ui.button(ctx, if (vw) "Vypnout" else "Zapnout", u * 4.5f,
+            if (vw) Ui.CARD_HI else Ui.ACCENT, if (vw) Ui.TEXT else Ui.BG) {
+            app.settings.voiceWake = !vw
+            if (!vw) cz.stihnuto.panel.VoiceWake.start(app) else cz.stihnuto.panel.VoiceWake.stop()
+            render()
+        })
+        return vRow
     }
 
     private fun renderWindows() {

@@ -234,12 +234,18 @@ object VoiceWake {
             try {
                 val pcm = src.copyOf()
                 cz.stihnuto.panel.Transcribe.prepare(pcm) // stejná úprava jako pro Gemini
+                // streamovaně (spolehlivější než MODE_STATIC, který u delších nahrávek chrčí)
                 val min = android.media.AudioTrack.getMinBufferSize(16000, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
                 track = android.media.AudioTrack(AudioManager.STREAM_MUSIC, 16000, AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT, maxOf(min, pcm.size * 2), android.media.AudioTrack.MODE_STATIC)
-                track.write(pcm, 0, pcm.size)
+                    AudioFormat.ENCODING_PCM_16BIT, maxOf(min, 16000), android.media.AudioTrack.MODE_STREAM)
                 track.play()
-                Thread.sleep((pcm.size * 1000L / 16000) + 300)
+                var off = 0
+                while (off < pcm.size) {
+                    val n = track.write(pcm, off, minOf(1600, pcm.size - off))
+                    if (n <= 0) break
+                    off += n
+                }
+                Thread.sleep(300)
             } catch (e: Exception) {
                 Log.w("Panel", "playLast", e)
             } finally {
