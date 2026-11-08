@@ -57,8 +57,15 @@ object Transcribe {
         val rms = Math.sqrt(sum / pcm.size)
         if (rms < 20) return // nejspíš ticho — nezesilovat šum
         val gain = (2000.0 / rms).coerceIn(1.0, 12.0)
-        if (gain <= 1.05) return
-        for (i in pcm.indices) pcm[i] = (pcm[i] * gain).toInt().coerceIn(-32768, 32767).toShort()
+        // měkké omezení: hlas pod kolenem beze změny, přebuzené špičky se plynule
+        // zaoblí místo tvrdého oříznutí (to dělalo „chrčení")
+        val knee = 26000.0
+        for (i in pcm.indices) {
+            val x = pcm[i] * gain
+            val a = Math.abs(x)
+            val y = if (a <= knee) x else Math.signum(x) * (knee + 6000.0 * Math.tanh((a - knee) / 6000.0))
+            pcm[i] = y.toInt().coerceIn(-32768, 32767).toShort()
+        }
     }
 
     /** Vrátí přepsaný text, nebo vyhodí výjimku se srozumitelnou zprávou. */
