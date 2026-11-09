@@ -14,7 +14,8 @@ import java.time.LocalDateTime
 /**
  * Hlavní okno: vlevo co největší čas (hodiny modře, minuty bíle), nad ním
  * datum, pod ním nejbližší událost. Vpravo úzký sloupec s předpovědí (ikona,
- * teplota, šance na déšť, mm), rolovací prstem až na 36 hodin, a pod časem souhrn dne.
+ * teplota, šance na déšť, mm), rolovací prstem (dnešek + zítřek), a pod časem souhrn dne.
+ * Sloupec se zúží, když ve výřezu neprší, a plynule roztáhne, když déšť přijde.
  */
 class ClockPage(ctx: Context) : Page(ctx) {
     private val app = App.instance
@@ -65,17 +66,27 @@ class ClockPage(ctx: Context) : Page(ctx) {
             val now = LocalDateTime.now()
             val wx = app.weather.data
 
-            // --- vpravo úzký sloupec s předpovědí (až 36 h, rolovací)
-            val allH = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(36)
+            // --- vpravo úzký sloupec s předpovědí (rolovací, dnešek + zítřek do půlnoci)
+            val cutoff = now.toLocalDate().plusDays(2).atStartOfDay() // půlnoc po zítřku
+            val allH = wx?.hours?.filter {
+                !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) && it.time.isBefore(cutoff)
+            }
             totalHrs = allH?.size ?: 0
             val visible = if (app.settings.topBar) 9 else 10
             val maxOff = maxOf(0, totalHrs - visible)
             if (hourOffset > maxOff) hourOffset = maxOff
             if (hourOffset < 0) hourOffset = 0
             val hrs = allH?.drop(hourOffset)?.take(visible)
-            // šance na déšť počítej z celého okna, ať se sloupec při rolování neškube na šířce
-            val anyRain = allH?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
-            val colW = if (hrs.isNullOrEmpty()) 0f else hu * (if (anyRain) 0.47f else 0.31f)
+            // šířka sloupce se řídí tím, jestli je déšť vidět v právě zobrazeném výřezu;
+            // ke cílové šířce se plynule dojede (rychlá animace místo skokového přepnutí)
+            val rainVisible = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
+            val target = if (hrs.isNullOrEmpty()) 0f else hu * (if (rainVisible) 0.47f else 0.31f)
+            if (colW <= 0f) colW = target else {
+                val d = target - colW
+                if (Math.abs(d) > 0.5f) { colW += d * 0.35f; postInvalidateOnAnimation() } else colW = target
+            }
+            // %/mm kresli, až je sloupec skoro roztažený, ať text během animace nevyčnívá
+            val showRain = rainVisible && colW > hu * 0.45f
             val r1 = w - pad * 0.3f
             val r0 = r1 - colW
             val t0 = pad * 0.5f
@@ -178,7 +189,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 WeatherIcon.draw(c, hr.code, hr.isDay, r0 + hu * 0.135f, m, hu * 0.062f)
                 temp.textSize = hu * 0.048f
                 c.drawText(Ui.deg(hr.temp), r0 + hu * 0.26f, m + hu * 0.017f, temp)
-                if (anyRain && (hr.precipProb >= 20 || hr.precip >= 0.1)) {
+                if (showRain && (hr.precipProb >= 20 || hr.precip >= 0.1)) {
                     rain.textSize = hu * 0.035f
                     c.drawText("${hr.precipProb}%", r0 + hu * 0.365f, m + hu * 0.013f, rain)
                     mm.textSize = hu * 0.032f
@@ -228,6 +239,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
         private var hourOffset = 0
         private var totalHrs = 0
         private var colLeft = 1e9f
+        private var colW = 0f // aktuální (animovaná) šířka sloupce s hodinovkou
         private var rowPx = 1f
         private var downY = 0f
     }
