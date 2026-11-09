@@ -5,11 +5,27 @@ import org.json.JSONObject
 /**
  * České vtipy. První je „Brutopýr", pak se berou ze seznamu 1283 vtipů staženého
  * online (účet @cz_vtipy), ať se neopakují. Offline padne na zabudovaný seznam.
+ * U hodin bývají děti, proto se vtipy s násilím nebo sexem vyřadí hned při stažení.
  */
 object Jokes {
     // veřejné JSON API projektu miroslavpalansky/ceske-vtipy
     private const val URL =
         "https://script.google.com/macros/s/AKfycbyZ5LJ99eRhSv8dQpRpIzY_VJfijqP36c47P5lc_rchetqkouLyugFF0jDrzWObuOI/exec?a=data"
+
+    // Vyřazení vtipů pro děti nevhodných. Kmeny slov volené tak, aby nechytaly
+    // běžná slova (např. „zab[ií]" sedne na „zabít", ne na „zabalit" nebo „zábava").
+    private val blocked = Regex(
+        "sex|porno|erotik|penis|vagín|klitor|vibrátor|dildo|kondom|prezervativ|antikoncepc|" +
+        "soulož|masturb|orgas|erekc|ejakul|sperm|varl|prostitut|nevěstinec|šuk|šoust|mrdat|" +
+        "mrdá|mrdaj|mrdk|zmrd|vymrd|(?<!pe)píč|kurv|čurák|čůrák|oplzl|chlípn|intimn|smiln|smilst|" +
+        "úchyl|zvrhl|děvk|znásil|" +
+        "zab[ií]|vrah|vražd|sebevraž|krvav|mrtvol|oběs[ií]|oběšen|uškrt|zastřel|postřel|" +
+        "střelb|střel[ií]|pistol|zbraň|zbran|teroris|atentát|masakr|výbuch|vybuch|mučen|" +
+        "zmlát|namlát|ubod|pobod|nabod|probod|bodnu|bodák|poprav[ií]|popraven|popravč|" +
+        "utonul|utopil|utopen|válk|válečn"
+    )
+
+    private fun clean(t: String) = !blocked.containsMatchIn(t.lowercase())
 
     private val builtin = listOf(
         "Co se stane z netopýra, když ho zabalím do krabice? Brutopýr.",
@@ -36,7 +52,7 @@ object Jokes {
                 val out = ArrayList<String>()
                 for (k in 0 until (arr?.length() ?: 0)) {
                     val t = arr!!.optJSONArray(k)?.optString(1)?.trim()
-                    if (!t.isNullOrBlank() && t.length in 3..400) out.add(t)
+                    if (!t.isNullOrBlank() && t.length in 3..400 && clean(t)) out.add(t)
                 }
                 if (out.isNotEmpty()) online = out
             } catch (e: Exception) {

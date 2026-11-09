@@ -13,8 +13,8 @@ import java.time.LocalDateTime
 
 /**
  * Hlavní okno: vlevo co největší čas (hodiny modře, minuty bíle), nad ním
- * datum, pod ním nejbližší událost. Vpravo úzký sloupec s předpovědí na
- * 10 hodin (ikona, teplota, šance na déšť, mm) a pod časem souhrn dne. Zároveň vzor pro nové okno.
+ * datum, pod ním nejbližší událost. Vpravo úzký sloupec s předpovědí (ikona,
+ * teplota, šance na déšť, mm), rolovací prstem až na 36 hodin, a pod časem souhrn dne.
  */
 class ClockPage(ctx: Context) : Page(ctx) {
     private val app = App.instance
@@ -65,9 +65,16 @@ class ClockPage(ctx: Context) : Page(ctx) {
             val now = LocalDateTime.now()
             val wx = app.weather.data
 
-            // --- vpravo úzký sloupec s předpovědí
-            val hrs = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(if (app.settings.topBar) 9 else 10)
-            val anyRain = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
+            // --- vpravo úzký sloupec s předpovědí (až 36 h, rolovací)
+            val allH = wx?.hours?.filter { !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) }?.take(36)
+            totalHrs = allH?.size ?: 0
+            val visible = if (app.settings.topBar) 9 else 10
+            val maxOff = maxOf(0, totalHrs - visible)
+            if (hourOffset > maxOff) hourOffset = maxOff
+            if (hourOffset < 0) hourOffset = 0
+            val hrs = allH?.drop(hourOffset)?.take(visible)
+            // šance na déšť počítej z celého okna, ať se sloupec při rolování neškube na šířce
+            val anyRain = allH?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
             val colW = if (hrs.isNullOrEmpty()) 0f else hu * (if (anyRain) 0.47f else 0.31f)
             val r1 = w - pad * 0.3f
             val r0 = r1 - colW
@@ -146,26 +153,28 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 }
             }
 
-            // --- předpověď na 10 hodin
+            // --- rolovací sloupec s předpovědí
             if (hrs.isNullOrEmpty()) return
             fill.color = Ui.CARD
             c.drawRoundRect(RectF(r0, t0, r1, t1), h * 0.04f, h * 0.04f, fill)
             val rowH = (t1 - t0 - h * 0.016f) / hrs.size
+            colLeft = r0; rowPx = rowH // pro rolování prstem
             hrs.forEachIndexed { i, hr ->
+                val nowRow = hourOffset == 0 && i == 0
                 val y = t0 + h * 0.008f + i * rowH
                 val m = y + rowH / 2
-                if (i == 0) {
+                if (nowRow) {
                     fill.color = Ui.CARD_HI
                     c.drawRoundRect(RectF(r0 + h * 0.008f, y + h * 0.002f, r1 - h * 0.008f, y + rowH - h * 0.002f),
                         rowH / 2, rowH / 2, fill)
                 }
-                if (hr.time.hour == 0 && i > 0) {
+                if (hr.time.hour == 0 && !nowRow) {
                     fill.color = Ui.FAINT
                     c.drawRect(r0 + h * 0.02f, y, r1 - h * 0.02f, y + 1.5f, fill)
                 }
                 hourLabel.textSize = hu * 0.042f
-                hourLabel.color = if (i == 0) Ui.TEXT else Ui.DIM
-                c.drawText(if (i == 0) "nyní" else "${hr.time.hour}", r0 + hu * 0.028f, m + hu * 0.015f, hourLabel)
+                hourLabel.color = if (nowRow) Ui.TEXT else Ui.DIM
+                c.drawText(if (nowRow) "nyní" else "${hr.time.hour}", r0 + hu * 0.028f, m + hu * 0.015f, hourLabel)
                 WeatherIcon.draw(c, hr.code, hr.isDay, r0 + hu * 0.135f, m, hu * 0.062f)
                 temp.textSize = hu * 0.048f
                 c.drawText(Ui.deg(hr.temp), r0 + hu * 0.26f, m + hu * 0.017f, temp)
@@ -176,10 +185,50 @@ class ClockPage(ctx: Context) : Page(ctx) {
                     c.drawText(Ui.num(hr.precip), r1 - hu * 0.022f, m + hu * 0.012f, mm)
                 }
             }
-            if (anyRain) {
-                legend.textSize = hu * 0.022f
-                c.drawText("déšť · mm", r1 - hu * 0.022f, t1 + hu * 0.032f, legend)
-            }
+            // náznak rolování: šipky, když je nahoře/dole víc hodin
+            fill.color = Ui.FAINT
+            val cxh = (r0 + r1) / 2
+            if (hourOffset > 0) caret(c, cxh, t0 + h * 0.022f, hu * 0.02f, true)
+            if (hourOffset < maxOff) caret(c, cxh, t1 - h * 0.022f, hu * 0.02f, false)
         }
+
+        private fun caret(c: Canvas, cx: Float, cy: Float, r: Float, up: Boolean) {
+            val p = android.graphics.Path()
+            val d = if (up) -1f else 1f
+            p.moveTo(cx - r, cy - r * 0.5f * d); p.lineTo(cx, cy + r * 0.5f * d); p.lineTo(cx + r, cy - r * 0.5f * d)
+            fill.style = Paint.Style.STROKE; fill.strokeWidth = r * 0.4f; fill.color = Ui.DIM
+            c.drawPath(p, fill); fill.style = Paint.Style.FILL
+        }
+
+        override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    if (totalHrs <= visibleRows() || e.x < colLeft) return false // mimo sloupec / není co rolovat → nech projet
+                    downY = e.y
+                    parent?.requestDisallowInterceptTouchEvent(true) // ať přejetí po sloupci nepřepne okno
+                    return true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val steps = ((downY - e.y) / rowPx).toInt()
+                    if (steps != 0) {
+                        hourOffset = (hourOffset + steps).coerceIn(0, maxOf(0, totalHrs - visibleRows()))
+                        downY = e.y
+                        invalidate()
+                    }
+                    return true
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL ->
+                    parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            return true
+        }
+
+        private fun visibleRows() = if (App.instance.settings.topBar) 9 else 10
+
+        private var hourOffset = 0
+        private var totalHrs = 0
+        private var colLeft = 1e9f
+        private var rowPx = 1f
+        private var downY = 0f
     }
 }
