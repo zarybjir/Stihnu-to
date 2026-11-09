@@ -58,11 +58,13 @@ class ClaudePage(ctx: Context) : Page(ctx) {
         listOf(
             listOf("Jak bude zítra?", "Bude dnes pršet?"),
             listOf("Kde se topí?", "Pusť hudbu"),
-            listOf("Vtip", "Kolik je hodin?"),
+            listOf("Vtip", "Co s dětmi?"),
         ).forEach { row ->
             val r = LinearLayout(ctx)
             row.forEachIndexed { i, q ->
-                r.addView(Ui.button(ctx, q, u * 4f) { if (q == "Vtip") tellJoke() else ask(q) },
+                r.addView(Ui.button(ctx, q, u * 4f) {
+                    when (q) { "Vtip" -> tellJoke(); "Co s dětmi?" -> kidsWeekend(); else -> ask(q) }
+                },
                     LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) leftMargin = (u * 2).toInt() })
             }
             chips.addView(r, LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() })
@@ -180,6 +182,33 @@ class ClaudePage(ctx: Context) : Page(ctx) {
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "cs-CZ")
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         r.startListening(intent)
+    }
+
+    /** Tipy, co dělat s dětmi o víkendu — z Kudyznudy, vybere asistent. */
+    private fun kidsWeekend() {
+        you.text = "Co s dětmi o víkendu?"
+        answer.text = ""
+        status.text = "Hledám tipy na Kudyznudy…"
+        cz.stihnuto.panel.VoiceWake.pause(true)
+        app.io.execute {
+            val prompt = try {
+                val html = cz.stihnuto.panel.Http.text(
+                    "https://www.kudyznudy.cz/kalendar-akci/akce-pro-deti/${app.settings.kznRegion}")
+                val text = html
+                    .replace(Regex("(?s)<script.*?</script>"), " ")
+                    .replace(Regex("(?s)<style.*?</style>"), " ")
+                    .replace(Regex("<[^>]+>"), " ")
+                    .replace(Regex("\\s+"), " ").trim().take(9000)
+                "Tohle je obsah stránky Kudyznudy s akcemi pro děti. Vyber 3 až 5 akcí vhodných pro rodinu " +
+                    "s dětmi na tento víkend a stručně je řekni (název, kdy a kde). Česky, krátce, bez odkazů. Obsah:\n" + text
+            } catch (e: Exception) {
+                "Nepodařilo se načíst akce z Kudyznudy. Řekni 3 obecné tipy, co dělat s dětmi o víkendu v Praze."
+            }
+            assistant(app).ask(prompt) { reply ->
+                cz.stihnuto.panel.VoiceWake.pause(false)
+                app.main.post { answer.text = reply; idle(); speak(reply) }
+            }
+        }
     }
 
     /** Zabudovaný český vtip (lepší než překlady z AI). */

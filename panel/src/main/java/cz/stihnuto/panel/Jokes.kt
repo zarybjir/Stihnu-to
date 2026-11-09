@@ -1,35 +1,67 @@
 package cz.stihnuto.panel
 
+import org.json.JSONObject
+
 /**
- * Zabudované české vtipy a slovní hříčky — ne překlady z angličtiny, aby dávaly
- * smysl. První je ten „Brutopýr"; další přibývají v pořadí a pak se cyklí.
+ * České vtipy. První je „Brutopýr", pak se berou ze seznamu 1283 vtipů staženého
+ * online (účet @cz_vtipy), ať se neopakují. Offline padne na zabudovaný seznam.
  */
 object Jokes {
-    private val list = listOf(
+    // veřejné JSON API projektu miroslavpalansky/ceske-vtipy
+    private const val URL =
+        "https://script.google.com/macros/s/AKfycbyZ5LJ99eRhSv8dQpRpIzY_VJfijqP36c47P5lc_rchetqkouLyugFF0jDrzWObuOI/exec?a=data"
+
+    private val builtin = listOf(
         "Co se stane z netopýra, když ho zabalím do krabice? Brutopýr.",
         "Přijde kostra do hospody a povídá: Jedno pivo. A hadr.",
         "Co řekne nula osmičce? Hezký pásek!",
         "Potkají se dva psi. Jeden štěkne: Haf! A ten druhý: No jo, to jsem ti chtěl říct zrovna já.",
         "Pepíčku, vyjmenuj čtyři kočkovité šelmy. No přece dvě kočky a dvě koťata.",
         "Víš, jak se řekne japonsky řidič? Takuji.",
-        "Leze veš po hlavě a říká si: Konečně jsem doma.",
-        "Baví se dvě tužky. Jedna povídá: Ty vypadáš unaveně. A ta druhá: Jsem dneska úplně tupá.",
         "Ptá se učitelka: Pepíčku, co víš o Mrtvém moři? A Pepíček: Já ani nevěděl, že bylo nemocné.",
-        "Sedí dva hrášky na talíři. Jeden spadne a ten druhý povídá: Tak co, kulišáku, jak ses skulil?",
         "Povídá šnek šnekovi: Pospěš si, nebo nám ujede autobus. A za hodinu: No vidíš, ujel.",
-        "Proč nosí sloni zelené trenky? Aby je nebylo vidět v trávě. A viděl jsi někdy slona v trávě? No vidíš, funguje to.",
-        "Ptá se syn: Tati, proč se moře nevylije? A táta: Protože má břehy, synku.",
-        "Co dělá pavouk na počítači? Pracuje na webu.",
-        "Dva bleší vyjdou z kina. Jeden povídá: Půjdeme pěšky, nebo chytíme psa?",
     )
+
+    @Volatile private var online: List<String> = emptyList()
+    @Volatile private var fetching = false
+    private val shown = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    /** Načte vtipy ze sítě na pozadí (volá se při startu a při otevření asistenta). */
+    fun prefetch(app: App) {
+        if (online.isNotEmpty() || fetching) return
+        fetching = true
+        app.io.execute {
+            try {
+                val arr = JSONObject(Http.text(URL)).optJSONArray("jokes")
+                val out = ArrayList<String>()
+                for (k in 0 until (arr?.length() ?: 0)) {
+                    val t = arr!!.optJSONArray(k)?.optString(1)?.trim()
+                    if (!t.isNullOrBlank() && t.length in 3..400) out.add(t)
+                }
+                if (out.isNotEmpty()) online = out
+            } catch (e: Exception) {
+                android.util.Log.w("Panel", "jokes", e)
+            } finally {
+                fetching = false
+            }
+        }
+    }
 
     fun next(app: App): String {
         val i = app.settings.jokeIndex
         app.settings.jokeIndex = i + 1
-        return list[i % list.size]
+        if (i == 0) return builtin[0] // první vždy Brutopýr
+        prefetch(app)
+        val pool = online
+        if (pool.isNotEmpty()) {
+            val fresh = pool.filter { it !in shown }
+            val pick = (if (fresh.isEmpty()) { shown.clear(); pool } else fresh).random()
+            shown.add(pick)
+            return pick
+        }
+        return builtin[i % builtin.size] // offline záloha
     }
 
-    /** Je to žádost o vtip? */
     fun isRequest(text: String) =
         Regex("\\bvtip|rozesm[ěe]j|n[ěe]co vtipn|pobav", RegexOption.IGNORE_CASE).containsMatchIn(text)
 }
