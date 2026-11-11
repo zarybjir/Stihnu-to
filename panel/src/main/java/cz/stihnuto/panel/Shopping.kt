@@ -65,15 +65,17 @@ class Shopping(private val app: App) {
         var changed = false
         for (it in items) {
             if (it.taken || now - it.sentAt < 6 * 3600_000L) continue
+            var c: HttpURLConnection? = null
             try {
-                val c = URL("https://ntfy.sh/$topic").openConnection() as HttpURLConnection
+                c = URL("https://ntfy.sh/$topic").openConnection() as HttpURLConnection
                 c.requestMethod = "POST"; c.doOutput = true
                 c.connectTimeout = 10000; c.readTimeout = 10000
                 c.outputStream.use { o -> o.write(JSONObject().put("id", it.id).put("text", it.text).toString().toByteArray()) }
                 if (c.responseCode in 200..299) { it.sentAt = now; changed = true }
-                c.disconnect()
             } catch (e: Exception) {
                 Log.w("Panel", "shopping send", e)
+            } finally {
+                c?.disconnect()
             }
         }
         if (changed) save()
@@ -83,13 +85,16 @@ class Shopping(private val app: App) {
         val c = URL("https://ntfy.sh/$topic-ack/json?poll=1&since=all").openConnection() as HttpURLConnection
         c.connectTimeout = 10000; c.readTimeout = 15000
         val acked = mutableSetOf<String>()
-        c.inputStream.bufferedReader().readLines().forEach { line ->
-            val ev = try { JSONObject(line) } catch (e: Exception) { return@forEach }
-            if (ev.optString("event") != "message") return@forEach
-            val a = try { JSONObject(ev.optString("message")).optJSONArray("ack") } catch (e: Exception) { null } ?: return@forEach
-            for (i in 0 until a.length()) acked += a.optString(i)
+        try {
+            c.inputStream.bufferedReader().use { it.readLines() }.forEach { line ->
+                val ev = try { JSONObject(line) } catch (e: Exception) { return@forEach }
+                if (ev.optString("event") != "message") return@forEach
+                val a = try { JSONObject(ev.optString("message")).optJSONArray("ack") } catch (e: Exception) { null } ?: return@forEach
+                for (i in 0 until a.length()) acked += a.optString(i)
+            }
+        } finally {
+            c.disconnect()
         }
-        c.disconnect()
         var changed = false
         items.forEach { if (!it.taken && it.id in acked) { it.taken = true; changed = true } }
         if (changed) { save(); app.main.post { listeners.forEach { it() } } }

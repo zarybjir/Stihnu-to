@@ -44,9 +44,13 @@ class AppsPage(ctx: Context) : Page(ctx) {
             }
             val uCol = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
             uCol.addView(Ui.text(ctx, "Panel" + (pv?.let { "  ·  $it" } ?: ""), u * 5.5f, Ui.TEXT, Ui.MEDIUM))
+            // průběh stahování a výsledek — hned vedle tlačítka, ať je vidět, že se něco děje
             val ust = Ui.text(ctx, "", u * 4f, Ui.ACCENT); statusViews[panel.key] = ust; uCol.addView(ust)
             uRow.addView(uCol, LinearLayout.LayoutParams(0, -2, 1f))
-            uRow.addView(Ui.button(ctx, "Aktualizovat", u * 4.5f, Ui.ACCENT, Ui.BG) { Updater.install(app, panel) })
+            uRow.addView(Ui.button(ctx, "Aktualizovat", u * 4.5f, Ui.ACCENT, Ui.BG) {
+                Updater.install(app, panel)
+                refreshStatuses() // „Hledám nejnovější verzi…“ ukázat hned, ne až za vteřinu
+            })
             list.addView(uRow)
         }
         list.addView(voiceBox(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 3).toInt(); bottomMargin = (u * 2).toInt() })
@@ -107,7 +111,9 @@ class AppsPage(ctx: Context) : Page(ctx) {
         renderWindows()
         list.addView(Ui.text(ctx, "Aplikace", u * 7, Ui.TEXT, Ui.MEDIUM),
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 6).toInt() })
-        for (item in Updater.catalog) {
+        // Panel má svůj řádek s aktualizací úplně nahoře — tady by byl podruhé
+        // (a stav stahování by se pak vypisoval jen do toho spodního, mimo obrazovku).
+        for (item in Updater.catalog.filter { it.key != "panel" }) {
             val installed = Updater.installedVersion(ctx, item.packageName)
             val row = LinearLayout(ctx).apply {
                 gravity = Gravity.CENTER_VERTICAL
@@ -122,13 +128,9 @@ class AppsPage(ctx: Context) : Page(ctx) {
             col.addView(st)
             row.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
 
-            val label = when {
-                item.key == "panel" -> "Aktualizovat"
-                installed == null -> "Nainstalovat"
-                else -> "Aktualizovat"
-            }
-            row.addView(Ui.button(ctx, label, u * 4.5f, Ui.ACCENT, Ui.BG) { Updater.install(app, item) })
-            if (installed != null && item.key != "panel") {
+            val label = if (installed == null) "Nainstalovat" else "Aktualizovat"
+            row.addView(Ui.button(ctx, label, u * 4.5f, Ui.ACCENT, Ui.BG) { Updater.install(app, item); refreshStatuses() })
+            if (installed != null) {
                 row.addView(Ui.button(ctx, "Otevřít", u * 4.5f) {
                     ctx.packageManager.getLaunchIntentForPackage(item.packageName)
                         ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)?.let(ctx::startActivity)

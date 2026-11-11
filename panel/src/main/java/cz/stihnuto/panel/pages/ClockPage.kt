@@ -2,20 +2,29 @@ package cz.stihnuto.panel.pages
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Shader
+import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewConfiguration
+import android.widget.OverScroller
 import cz.stihnuto.panel.App
 import cz.stihnuto.panel.Ui
 import cz.stihnuto.panel.weather.WeatherIcon
 import java.time.LocalDate
 import java.time.LocalDateTime
+import kotlin.math.abs
 
 /**
  * Hlavní okno: vlevo co největší čas (hodiny modře, minuty bíle), nad ním
  * datum, pod ním nejbližší událost. Vpravo úzký sloupec s předpovědí (ikona,
- * teplota, šance na déšť, mm), rolovací prstem (dnešek + zítřek), a pod časem souhrn dne.
- * Sloupec se zúží, když ve výřezu neprší, a plynule roztáhne, když déšť přijde.
+ * teplota, šance na déšť, mm) na dnešek a zítřek — roluje se prstem plynule,
+ * se setrvačností. Sloupec se zúží, když ve výřezu neprší, a plynule roztáhne,
+ * když déšť přijde. Pod časem je souhrn dne.
  */
 class ClockPage(ctx: Context) : Page(ctx) {
     private val app = App.instance
@@ -40,6 +49,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
         app.main.removeCallbacks(tick)
         app.weather.unlisten(onData)
         app.calendar.unlisten(onData)
+        canvasView.backToNow(animate = false) // příště zase od „nyní“
     }
 
     private class ClockView(ctx: Context) : View(ctx) {
@@ -52,9 +62,60 @@ class ClockPage(ctx: Context) : Page(ctx) {
         private val mm = Ui.paint(Ui.DIM, 1f, Ui.REGULAR, Paint.Align.RIGHT)
         private val small = Ui.paint(Ui.DIM, 1f, Ui.REGULAR, Paint.Align.CENTER)
         private val value2 = Ui.paint(Ui.TEXT, 1f, Ui.MEDIUM, Paint.Align.CENTER)
-        private val legend = Ui.paint(Ui.FAINT, 1f, Ui.REGULAR, Paint.Align.RIGHT)
         private val temp = Ui.paint(Ui.TEXT, 1f, Ui.MEDIUM, Paint.Align.RIGHT)
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val fade = Paint()
+        private val rect = RectF()
+        private val cardPath = Path()
+        private val caretPath = Path()
+
+        // --- rolování hodinovky (plynulé, po pixelech)
+        private val scroller = OverScroller(ctx)
+        private val slop = ViewConfiguration.get(ctx).scaledTouchSlop
+        private val minFling = ViewConfiguration.get(ctx).scaledMinimumFlingVelocity
+        private val maxFling = ViewConfiguration.get(ctx).scaledMaximumFlingVelocity
+        private var tracker: VelocityTracker? = null
+        /** O kolik pixelů je seznam hodin odrolovaný (0 = nahoře je „nyní“). */
+        private var scrollPx = 0f
+        private var maxScroll = 0f
+        /** Kam seznam po puštění prstu plynule dojíždí (celý řádek); NaN = nikam. */
+        private var settleTo = Float.NaN
+        /** Prst je na sloupci (i když se ještě nehýbe) / už se jím roluje. */
+        private var touching = false
+        private var dragging = false
+        private var downX = 0f
+        private var downY = 0f
+        private var lastY = 0f
+        /** Levý okraj sloupce — dotyk vlevo od něj patří přepínání oken. */
+        private var colLeft = 1e9f
+        /** Aktuální (animovaná) šířka sloupce a jestli má být široký (s deštěm). */
+        private var colW = 0f
+        private var wide = false
+        /** Po chvíli bez dotyku se hodinovka sama vrátí na „nyní“. */
+        private val returnToNow = Runnable { backToNow(animate = true) }
+
+        // velikost písma času se počítá jen při změně místa, ne v každém snímku rolování
+        private var fitWidth = -1f
+        private var fitHeight = -1f
+        private var fitSize = 0f
+        // přechody na okrajích sloupce (naznačí, že seznam pokračuje)
+        private var fadeTop: Shader? = null
+        private var fadeBottom: Shader? = null
+        private var fadeKey = 0f
+
+        fun backToNow(animate: Boolean) {
+            removeCallbacks(returnToNow)
+            scroller.forceFinished(true)
+            settleTo = Float.NaN
+            if (animate && scrollPx > 0f) {
+                settleTo = 0f
+                scroller.startScroll(0, scrollPx.toInt(), 0, -scrollPx.toInt(), 700)
+                postInvalidateOnAnimation()
+            } else if (scrollPx != 0f) {
+                scrollPx = 0f
+                invalidate()
+            }
+        }
 
         override fun onDraw(c: Canvas) {
             val app = App.instance
@@ -66,31 +127,55 @@ class ClockPage(ctx: Context) : Page(ctx) {
             val now = LocalDateTime.now()
             val wx = app.weather.data
 
-            // --- vpravo úzký sloupec s předpovědí (rolovací, dnešek + zítřek do půlnoci)
-            val cutoff = now.toLocalDate().plusDays(2).atStartOfDay() // půlnoc po zítřku
-            val allH = wx?.hours?.filter {
-                !it.time.isBefore(now.withMinute(0).withSecond(0).withNano(0)) && it.time.isBefore(cutoff)
+            // setrvačnost po puštění prstu, dosednutí na celý řádek a návrat na „nyní“
+            if (scroller.computeScrollOffset()) {
+                scrollPx = scroller.currY.toFloat()
+                if (scroller.isFinished && !settleTo.isNaN()) { scrollPx = settleTo; settleTo = Float.NaN }
+                postInvalidateOnAnimation()
             }
-            totalHrs = allH?.size ?: 0
-            val visible = if (app.settings.topBar) 9 else 10
-            val maxOff = maxOf(0, totalHrs - visible)
-            if (hourOffset > maxOff) hourOffset = maxOff
-            if (hourOffset < 0) hourOffset = 0
-            val hrs = allH?.drop(hourOffset)?.take(visible)
-            // šířka sloupce se řídí tím, jestli je déšť vidět v právě zobrazeném výřezu;
-            // ke cílové šířce se plynule dojede (rychlá animace místo skokového přepnutí)
-            val rainVisible = hrs?.any { it.precipProb >= 20 || it.precip >= 0.1 } == true
-            val target = if (hrs.isNullOrEmpty()) 0f else hu * (if (rainVisible) 0.47f else 0.31f)
-            if (colW <= 0f) colW = target else {
-                val d = target - colW
-                if (Math.abs(d) > 0.5f) { colW += d * 0.35f; postInvalidateOnAnimation() } else colW = target
-            }
-            // %/mm kresli, až je sloupec skoro roztažený, ať text během animace nevyčnívá
-            val showRain = rainVisible && colW > hu * 0.45f
-            val r1 = w - pad * 0.3f
-            val r0 = r1 - colW
+
+            // --- vpravo úzký sloupec s předpovědí (dnešek + zítřek do půlnoci)
             val t0 = pad * 0.5f
             val t1 = h - pad * 0.9f
+            val visible = if (app.settings.topBar) 9 else 10
+            val rowH = (t1 - t0 - h * 0.016f) / visible
+            val thisHour = now.withMinute(0).withSecond(0).withNano(0)
+            val cutoff = now.toLocalDate().plusDays(2).atStartOfDay() // půlnoc po zítřku
+            val allH = wx?.hours?.filter { !it.time.isBefore(thisHour) && it.time.isBefore(cutoff) }.orEmpty()
+            val total = allH.size
+            maxScroll = maxOf(0, total - visible) * rowH
+            scrollPx = scrollPx.coerceIn(0f, maxScroll)
+            // Prst pryč a setrvačnost dojela: seznam měkce dosedne na nejbližší celý řádek,
+            // ať v klidu nezůstávají nahoře a dole useknuté půlřádky.
+            if (!touching && scroller.isFinished && settleTo.isNaN()) {
+                val snapped = (Math.round(scrollPx / rowH) * rowH).coerceIn(0f, maxScroll)
+                if (abs(snapped - scrollPx) > 0.5f) {
+                    settleTo = snapped
+                    scroller.startScroll(0, scrollPx.toInt(), 0, Math.round(snapped - scrollPx), 220)
+                    postInvalidateOnAnimation()
+                }
+            }
+            // první (i jen zčásti) viditelný řádek a o kolik je vysunutý nahoru
+            val first = (scrollPx / rowH).toInt().coerceIn(0, maxOf(0, total - 1))
+            val frac = scrollPx - first * rowH
+
+            // Šířka sloupce se řídí deštěm ve výřezu: roztáhne se, když je řádek s deštěm vidět
+            // aspoň z půlky, a zúží, až žádný takový vidět není vůbec (ať to při pomalém
+            // rolování na hraně nepřeskakuje sem a tam).
+            fun rainy(i: Int) = allH[i].let { it.precipProb >= 20 || it.precip >= 0.1 }
+            val half = Math.round(scrollPx / rowH)
+            val rainHalf = (half until minOf(total, half + visible)).any { rainy(it) }
+            val rainAny = (first until minOf(total, first + visible + 1)).any { rainy(it) }
+            if (rainHalf) wide = true else if (!rainAny) wide = false
+            val target = if (total == 0) 0f else hu * (if (wide) 0.47f else 0.31f)
+            if (colW <= 0f) colW = target else {
+                val d = target - colW
+                if (abs(d) > 0.5f) { colW += d * 0.35f; postInvalidateOnAnimation() } else colW = target
+            }
+            // %/mm kresli, až je sloupec skoro roztažený, ať text během animace nevyčnívá
+            val showRain = colW > hu * 0.45f
+            val r1 = w - pad * 0.3f
+            val r0 = r1 - colW
 
             // --- vlevo čas, velikost podle dostupné šířky (číslice Roboto mají stejnou šířku)
             val leftR = r0 - pad * 0.25f
@@ -98,12 +183,18 @@ class ClockPage(ctx: Context) : Page(ctx) {
             val cx = leftL + (leftR - leftL) / 2
             val hh = "${now.hour}"
             val mmText = ":%02d".format(now.minute)
-            var size = h * 0.66f
-            fun total(): Float {
-                hours.textSize = size; minutes.textSize = size
-                return hours.measureText("00") + minutes.measureText(":00")
+            val avail = leftR - leftL - pad * 0.25f
+            if (avail != fitWidth || h != fitHeight) {
+                var s = h * 0.66f
+                fun timeWidth(): Float {
+                    hours.textSize = s; minutes.textSize = s
+                    return hours.measureText("00") + minutes.measureText(":00")
+                }
+                while (timeWidth() > avail && s > 10) s *= 0.99f
+                fitSize = s; fitWidth = avail; fitHeight = h
             }
-            while (total() > leftR - leftL - pad * 0.25f && size > 10) size *= 0.99f
+            val size = fitSize
+            hours.textSize = size; minutes.textSize = size
             val cap = size * 0.711f
             val base = h * 0.43f + cap / 2
             val realW = hours.measureText(hh) + minutes.measureText(mmText)
@@ -116,7 +207,8 @@ class ClockPage(ctx: Context) : Page(ctx) {
 
             // --- nejbližší událost
             val chipY = base + h * 0.095f
-            app.calendar.upcoming().firstOrNull()?.let { next ->
+            val next = app.calendar.upcoming().firstOrNull()
+            if (next != null) {
                 val today = LocalDate.now()
                 val day = when (next.start.toLocalDate()) {
                     today -> ""
@@ -131,7 +223,8 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 val cy = chipY
                 val l = cx - pw / 2
                 fill.color = Ui.CARD_HI
-                c.drawRoundRect(RectF(l, cy - h * 0.04f, l + pw, cy + h * 0.04f), h * 0.04f, h * 0.04f, fill)
+                rect.set(l, cy - h * 0.04f, l + pw, cy + h * 0.04f)
+                c.drawRoundRect(rect, h * 0.04f, h * 0.04f, fill)
                 fill.color = Ui.PRIMARY
                 c.drawCircle(l + h * 0.033f, cy, h * 0.009f, fill)
                 c.drawText(t, l + h * 0.056f, cy + h * 0.016f, chip)
@@ -146,7 +239,7 @@ class ClockPage(ctx: Context) : Page(ctx) {
                 )
                 val iw = (leftR - leftL) / info.size
                 // svisle doprostřed mezi čas (nebo událost) a spodní okraj
-                val top = if (app.calendar.upcoming().isNotEmpty()) chipY + h * 0.045f else base
+                val top = if (next != null) chipY + h * 0.045f else base
                 val bottom = h * 0.93f
                 val labelSize = h * 0.046f
                 val iy = top + (bottom - top - h * 0.12f) / 2 + h * 0.046f
@@ -165,19 +258,32 @@ class ClockPage(ctx: Context) : Page(ctx) {
             }
 
             // --- rolovací sloupec s předpovědí
-            if (hrs.isNullOrEmpty()) return
+            if (total == 0) return
+            colLeft = r0
+            val rad = h * 0.04f
             fill.color = Ui.CARD
-            c.drawRoundRect(RectF(r0, t0, r1, t1), h * 0.04f, h * 0.04f, fill)
-            val rowH = (t1 - t0 - h * 0.016f) / hrs.size
-            colLeft = r0; rowPx = rowH // pro rolování prstem
-            hrs.forEachIndexed { i, hr ->
-                val nowRow = hourOffset == 0 && i == 0
-                val y = t0 + h * 0.008f + i * rowH
+            rect.set(r0, t0, r1, t1)
+            c.drawRoundRect(rect, rad, rad, fill)
+            val top = t0 + h * 0.008f
+            val bottom = t1 - h * 0.008f
+
+            // řádky se kreslí posunuté o zlomek výšky a oříznuté do karty (i do jejích oblých rohů)
+            c.save()
+            cardPath.reset()
+            cardPath.addRoundRect(rect, rad, rad, Path.Direction.CW)
+            c.clipPath(cardPath)
+            c.clipRect(r0, top, r1, bottom)
+            var k = 0
+            while (first + k < total) {
+                val y = top + k * rowH - frac
+                if (y >= bottom) break
+                val hr = allH[first + k]
+                val nowRow = first + k == 0
                 val m = y + rowH / 2
                 if (nowRow) {
                     fill.color = Ui.CARD_HI
-                    c.drawRoundRect(RectF(r0 + h * 0.008f, y + h * 0.002f, r1 - h * 0.008f, y + rowH - h * 0.002f),
-                        rowH / 2, rowH / 2, fill)
+                    rect.set(r0 + h * 0.008f, y + h * 0.002f, r1 - h * 0.008f, y + rowH - h * 0.002f)
+                    c.drawRoundRect(rect, rowH / 2, rowH / 2, fill)
                 }
                 if (hr.time.hour == 0 && !nowRow) {
                     fill.color = Ui.FAINT
@@ -195,52 +301,106 @@ class ClockPage(ctx: Context) : Page(ctx) {
                     mm.textSize = hu * 0.032f
                     c.drawText(Ui.num(hr.precip), r1 - hu * 0.022f, m + hu * 0.012f, mm)
                 }
+                k++
             }
+            // useknuté řádky u okrajů (jen během rolování) plynule mizí do barvy karty
+            val more = scrollPx < maxScroll - 0.5f
+            val cut = frac > 0.5f && frac < rowH - 0.5f
+            val fadeH = rowH * 0.6f
+            if (fadeTop == null || fadeKey != top + bottom + fadeH) {
+                val clear = Ui.CARD and 0x00FFFFFF
+                fadeTop = LinearGradient(0f, top, 0f, top + fadeH, Ui.CARD, clear, Shader.TileMode.CLAMP)
+                fadeBottom = LinearGradient(0f, bottom - fadeH, 0f, bottom, clear, Ui.CARD, Shader.TileMode.CLAMP)
+                fadeKey = top + bottom + fadeH
+            }
+            if (cut) {
+                fade.shader = fadeTop; c.drawRect(r0, top, r1, top + fadeH, fade)
+                fade.shader = fadeBottom; c.drawRect(r0, bottom - fadeH, r1, bottom, fade)
+            }
+            c.restore()
+
             // náznak rolování: šipky, když je nahoře/dole víc hodin
-            fill.color = Ui.FAINT
             val cxh = (r0 + r1) / 2
-            if (hourOffset > 0) caret(c, cxh, t0 + h * 0.022f, hu * 0.02f, true)
-            if (hourOffset < maxOff) caret(c, cxh, t1 - h * 0.022f, hu * 0.02f, false)
+            if (scrollPx > 0.5f) caret(c, cxh, t0 + h * 0.022f, hu * 0.02f, true)
+            if (more) caret(c, cxh, t1 - h * 0.022f, hu * 0.02f, false)
         }
 
         private fun caret(c: Canvas, cx: Float, cy: Float, r: Float, up: Boolean) {
-            val p = android.graphics.Path()
             val d = if (up) -1f else 1f
-            p.moveTo(cx - r, cy - r * 0.5f * d); p.lineTo(cx, cy + r * 0.5f * d); p.lineTo(cx + r, cy - r * 0.5f * d)
+            caretPath.reset()
+            caretPath.moveTo(cx - r, cy - r * 0.5f * d)
+            caretPath.lineTo(cx, cy + r * 0.5f * d)
+            caretPath.lineTo(cx + r, cy - r * 0.5f * d)
             fill.style = Paint.Style.STROKE; fill.strokeWidth = r * 0.4f; fill.color = Ui.DIM
-            c.drawPath(p, fill); fill.style = Paint.Style.FILL
+            c.drawPath(caretPath, fill)
+            fill.style = Paint.Style.FILL
         }
 
-        override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+        /**
+         * Svislý tah po sloupci roluje hodinovku (obsah jede s prstem, po puštění dojede
+         * setrvačností). Vodorovné přejetí se nechá být — přepne okno jako všude jinde.
+         */
+        override fun onTouchEvent(e: MotionEvent): Boolean {
             when (e.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> {
-                    if (totalHrs <= visibleRows() || e.x < colLeft) return false // mimo sloupec / není co rolovat → nech projet
-                    downY = e.y
-                    parent?.requestDisallowInterceptTouchEvent(true) // ať přejetí po sloupci nepřepne okno
+                MotionEvent.ACTION_DOWN -> {
+                    if (maxScroll <= 0f || e.x < colLeft) return false // mimo sloupec / není co rolovat
+                    removeCallbacks(returnToNow)
+                    scroller.forceFinished(true)
+                    settleTo = Float.NaN
+                    downX = e.x; downY = e.y; lastY = e.y
+                    touching = true
+                    dragging = false
+                    tracker?.recycle()
+                    tracker = VelocityTracker.obtain().also { it.addMovement(e) }
                     return true
                 }
-                android.view.MotionEvent.ACTION_MOVE -> {
-                    val steps = ((downY - e.y) / rowPx).toInt()
-                    if (steps != 0) {
-                        hourOffset = (hourOffset + steps).coerceIn(0, maxOf(0, totalHrs - visibleRows()))
-                        downY = e.y
+                MotionEvent.ACTION_MOVE -> {
+                    tracker?.addMovement(e)
+                    if (!dragging) {
+                        val dy = abs(e.y - downY)
+                        if (dy > slop && dy > abs(e.x - downX)) {
+                            dragging = true
+                            lastY = e.y // bez skoku o délku „rozjezdu“
+                            parent?.requestDisallowInterceptTouchEvent(true) // teď už to není přepnutí okna
+                        }
+                    }
+                    if (dragging) {
+                        scrollPx = (scrollPx + lastY - e.y).coerceIn(0f, maxScroll)
+                        lastY = e.y
                         invalidate()
                     }
-                    return true
                 }
-                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL ->
-                    parent?.requestDisallowInterceptTouchEvent(false)
+                MotionEvent.ACTION_UP -> {
+                    var swipe = 0
+                    if (dragging) tracker?.let { t ->
+                        t.addMovement(e)
+                        t.computeCurrentVelocity(1000, maxFling.toFloat())
+                        val v = -t.yVelocity // prst nahoru = obsah jede dál dolů
+                        if (abs(v) > minFling) {
+                            scroller.fling(0, scrollPx.toInt(), 0, v.toInt(), 0, 0, 0, maxScroll.toInt())
+                            postInvalidateOnAnimation()
+                        }
+                    } else {
+                        // Šikmé přejetí do strany, které se nestalo rolováním: přepni okno stejně,
+                        // jako kdyby začalo kdekoli jinde na obrazovce.
+                        val dx = e.x - downX
+                        if (abs(dx) > width * 0.1f && abs(dx) > abs(e.y - downY)) swipe = if (dx < 0) 1 else -1
+                    }
+                    endTouch()
+                    if (swipe != 0) (parent as? cz.stihnuto.panel.Pager)?.onSwipe?.invoke(swipe)
+                }
+                MotionEvent.ACTION_CANCEL -> endTouch()
             }
             return true
         }
 
-        private fun visibleRows() = if (App.instance.settings.topBar) 9 else 10
-
-        private var hourOffset = 0
-        private var totalHrs = 0
-        private var colLeft = 1e9f
-        private var colW = 0f // aktuální (animovaná) šířka sloupce s hodinovkou
-        private var rowPx = 1f
-        private var downY = 0f
+        private fun endTouch() {
+            touching = false
+            dragging = false
+            tracker?.recycle(); tracker = null
+            parent?.requestDisallowInterceptTouchEvent(false)
+            postDelayed(returnToNow, 45_000)
+            invalidate() // ať se spustí dosednutí na celý řádek
+        }
     }
 }

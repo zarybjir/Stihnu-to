@@ -29,6 +29,9 @@ import java.util.concurrent.TimeUnit
  *  - POST /api/ask          {"text":"…"} → odpověď Clauda
  *
  * Díky API může panel ovládat i Claude na počítači (viz README).
+ *
+ * Server nemá heslo (patří jen do domácí sítě), ale brání se útoku z webové stránky
+ * otevřené na jiném zařízení v téže síti — viz [guard].
  */
 class WebServer(private val app: App, private val port: Int) {
     private val pool = Executors.newFixedThreadPool(3)
@@ -51,7 +54,10 @@ class WebServer(private val app: App, private val port: Int) {
         }, "web").apply { isDaemon = true }.start()
     }
 
-    private class Req(val method: String, val path: String, val query: Map<String, String>, val body: String) {
+    private class Req(
+        val method: String, val path: String, val query: Map<String, String>, val body: String,
+        val headers: Map<String, String>,
+    ) {
         fun form(): Map<String, String> = parseQuery(body)
         fun json(): JSONObject = if (body.trimStart().startsWith("{")) JSONObject(body) else JSONObject(form() + query)
     }
@@ -65,14 +71,16 @@ class WebServer(private val app: App, private val port: Int) {
                 val parts = requestLine.split(' ')
                 if (parts.size < 2) return
                 val headers = mutableMapOf<String, String>()
+                var count = 0
                 while (true) {
                     val line = readLine(input) ?: break
                     if (line.isEmpty()) break
+                    if (++count > 100) return // nesmyslně mnoho hlaviček
                     val i = line.indexOf(':')
                     if (i > 0) headers[line.substring(0, i).trim().lowercase()] = line.substring(i + 1).trim()
                 }
                 val len = headers["content-length"]?.toIntOrNull() ?: 0
-                val body = ByteArray(len.coerceAtMost(1_000_000))
+                val body = ByteArray(len.coerceIn(0, 1_000_000))
                 var read = 0
                 while (read < body.size) {
                     val n = input.read(body, read, body.size - read)
@@ -80,8 +88,10 @@ class WebServer(private val app: App, private val port: Int) {
                     read += n
                 }
                 val (path, qs) = parts[1].split('?', limit = 2).let { it[0] to it.getOrElse(1) { "" } }
-                val req = Req(parts[0], path, parseQuery(qs), String(body, 0, read, Charsets.UTF_8))
-                route(req, sock.getOutputStream())
+                val req = Req(parts[0].uppercase(), path, parseQuery(qs), String(body, 0, read, Charsets.UTF_8), headers)
+                val out = sock.getOutputStream()
+                val denied = guard(req)
+                if (denied != null) send(out, denied.first, "text/plain; charset=utf-8", denied.second) else route(req, out)
             } catch (e: Exception) {
                 Log.w("Panel", "web request", e)
                 try {
@@ -90,6 +100,25 @@ class WebServer(private val app: App, private val port: Int) {
                 }
             }
         }
+    }
+
+    /**
+     * Ochrana před útokem z webové stránky, kterou si někdo otevře na jiném zařízení
+     * v domácí síti (prohlížeč pak umí posílat požadavky na hodiny za něj):
+     *  - adresa v hlavičce Host musí být IP nebo místní jméno → nejde „DNS rebinding“,
+     *  - cokoli, co něco mění, jen metodou POST → nejde to vyvolat obrázkem ani odkazem,
+     *  - prohlížeč u POST posílá Origin (příp. Referer) → požadavek z cizí stránky se odmítne.
+     * Skripty a curl hlavičku Origin neposílají a fungují dál. Vrací null = v pořádku,
+     * jinak stavový kód a důvod odmítnutí.
+     */
+    private fun guard(r: Req): Pair<Int, String>? {
+        val host = r.headers["host"]
+        if (host != null && !isLocalHost(host)) return 403 to "Panel otevři přes jeho IP adresu (viz okno Aplikace)."
+        if (r.path !in WRITE_PATHS) return null
+        if (r.method != "POST") return 405 to "Tahle adresa bere jen POST."
+        val from = r.headers["origin"] ?: r.headers["referer"] ?: return null // curl, skript — ne prohlížeč
+        return if (host != null && sameOrigin(from, host)) null
+        else 403 to "Požadavek z cizí stránky byl odmítnut."
     }
 
     private fun route(r: Req, out: OutputStream) {
@@ -185,9 +214,16 @@ class WebServer(private val app: App, private val port: Int) {
 
     private fun send(out: OutputStream, code: Int, type: String, body: String) {
         val bytes = body.toByteArray(Charsets.UTF_8)
-        val status = when (code) { 200 -> "OK"; 404 -> "Not Found"; else -> "Error" }
+        val status = when (code) {
+            200 -> "OK"; 403 -> "Forbidden"; 404 -> "Not Found"; 405 -> "Method Not Allowed"; else -> "Error"
+        }
+        // Bez Access-Control-Allow-Origin: odpovědi (stav, nastavení) nesmí číst cizí webové stránky.
+        // nosniff + zákaz rámů: stránku nejde vložit do cizí stránky ani ji vydávat za skript.
+        // Referrer-Policy same-origin (ne no-referrer — s ním by prohlížeč u formuláře poslal Origin: null).
         out.write(("HTTP/1.1 $code $status\r\nContent-Type: $type\r\nContent-Length: ${bytes.size}\r\n" +
-            "Cache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n").toByteArray())
+            "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\n" +
+            "Content-Security-Policy: frame-ancestors 'none'\r\nReferrer-Policy: same-origin\r\n" +
+            "Connection: close\r\n\r\n").toByteArray())
         out.write(bytes)
         out.flush()
     }
@@ -204,6 +240,37 @@ class WebServer(private val app: App, private val port: Int) {
     }
 
     companion object {
+        /** Adresy, které něco mění nebo stojí peníze — jen POST a jen ze stejné stránky (viz [guard]). */
+        val WRITE_PATHS = setOf(
+            "/save", "/update", "/api/page", "/api/heating", "/api/media", "/api/play", "/api/open", "/api/ask",
+        )
+
+        /**
+         * Je hodnota hlavičky Host adresa v místní síti? IP adresa, localhost, jméno bez tečky
+         * nebo s koncovkou místní sítě. Veřejné doménové jméno (útok „DNS rebinding“) neprojde.
+         */
+        fun isLocalHost(hostHeader: String): Boolean {
+            val h = hostHeader.trim().lowercase()
+            if (h.startsWith("[")) return h.contains("]") // IPv6 adresa
+            val name = when (h.count { it == ':' }) {
+                0 -> h
+                1 -> h.substringBefore(':') // jméno:port
+                else -> return false
+            }
+            if (Regex("""^\d{1,3}(\.\d{1,3}){3}$""").matches(name)) return true
+            if (!Regex("""^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$""").matches(name)) return false
+            return '.' !in name || name.endsWith(".local") || name.endsWith(".lan") || name.endsWith(".home.arpa")
+        }
+
+        /** Pochází požadavek (Origin nebo Referer) ze stránky na téže adrese, na jakou jde (Host)? */
+        fun sameOrigin(from: String, hostHeader: String): Boolean {
+            val f = from.trim().lowercase()
+            val i = f.indexOf("://")
+            if (i <= 0 || f.substring(0, i) !in setOf("http", "https")) return false // i „null“
+            val authority = f.substring(i + 3).substringBefore('/').substringBefore('?').substringBefore('#')
+            return authority.isNotEmpty() && authority == hostHeader.trim().lowercase()
+        }
+
         fun parseQuery(q: String): Map<String, String> = q.split('&').filter { it.isNotEmpty() }.associate {
             val i = it.indexOf('=')
             val k = if (i >= 0) it.substring(0, i) else it

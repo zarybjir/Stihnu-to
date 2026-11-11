@@ -44,7 +44,11 @@ object Updater {
     }
 
     private val statuses = java.util.concurrent.ConcurrentHashMap<String, String>()
-    private val sessionKeys = java.util.concurrent.ConcurrentHashMap<Int, String>()
+    /** Co se právě stahuje — další klepnutí na „Aktualizovat“ nesmí spustit druhé stahování. */
+    private val busy = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Větší APK než tohle je určitě chyba (panel má ~35 MB). */
+    private const val MAX_APK = 300L * 1024 * 1024
 
     fun status(key: String): String = statuses[key] ?: ""
 
@@ -81,29 +85,62 @@ object Updater {
     }
 
     fun install(app: App, item: Installable) {
+        if (!busy.add(item.key)) return // už se stahuje
         statuses[item.key] = "Hledám nejnovější verzi…"
         app.io.execute {
+            val installer = app.packageManager.packageInstaller
+            var sessionId = -1
             try {
                 val url = item.apkUrl()
+                if (!url.startsWith("https://github.com/")) throw IllegalStateException("nečekaná adresa ke stažení")
                 statuses[item.key] = "Stahuji…"
-                val apk = Http.bytes(url, 120_000)
-                val installer = app.packageManager.packageInstaller
                 val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
                     .apply { setAppPackageName(item.packageName) }
-                val id = installer.createSession(params)
-                sessionKeys[id] = item.key
-                installer.openSession(id).use { s ->
-                    s.openWrite("app.apk", 0, apk.size.toLong()).use { it.write(apk); s.fsync(it) }
+                sessionId = installer.createSession(params)
+                var size = 0L
+                installer.openSession(sessionId).use { s ->
+                    // Rovnou z internetu do instalátoru — desítky MB se nedrží v paměti hodin.
+                    Http.open(url, 120_000) { input, total, conn ->
+                        // GitHub přesměrovává na své úložiště (jeho adresa se časem mění) — stačí trvat
+                        // na šifrovaném spojení; pravost aktualizace hlídá Android podpisem aplikace.
+                        if (conn.url.protocol != "https") throw IllegalStateException("stahování není šifrované")
+                        if (total > MAX_APK) throw IllegalStateException("soubor je podezřele velký")
+                        s.openWrite("app.apk", 0, if (total > 0) total else -1).use { out ->
+                            val buf = ByteArray(64 * 1024)
+                            var shown = -1L
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                size += n
+                                if (size > MAX_APK) throw IllegalStateException("soubor je podezřele velký")
+                                out.write(buf, 0, n)
+                                val mb = size / 1024 / 1024
+                                if (mb != shown) {
+                                    shown = mb
+                                    statuses[item.key] = if (total > 0) "Stahuji… ${100 * size / total} % ($mb z ${total / 1024 / 1024} MB)"
+                                    else "Stahuji… $mb MB"
+                                }
+                            }
+                            s.fsync(out)
+                        }
+                        if (total > 0 && size != total) throw java.io.IOException("stahování se přerušilo")
+                    }
+                    if (size < 100_000) throw java.io.IOException("stažený soubor je neúplný")
                     val pi = PendingIntent.getBroadcast(
-                        app, id, Intent(app, InstallResult::class.java).putExtra("key", item.key),
+                        app, sessionId, Intent(app, InstallResult::class.java).putExtra("key", item.key),
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
                     )
                     s.commit(pi.intentSender)
                 }
-                statuses[item.key] = "Staženo (${apk.size / 1024 / 1024} MB) — potvrď instalaci na displeji."
+                sessionId = -1 // předáno systému, dál se o ni stará on
+                statuses[item.key] = "Staženo (${size / 1024 / 1024} MB) — potvrď instalaci na displeji."
             } catch (e: Exception) {
                 Log.w("Panel", "install ${item.key}", e)
                 statuses[item.key] = "Nepovedlo se: ${e.message ?: e.javaClass.simpleName}"
+                // nedokončenou instalaci zahodit, ať nezabírá místo v úložišti
+                if (sessionId >= 0) try { installer.abandonSession(sessionId) } catch (_: Exception) {}
+            } finally {
+                busy.remove(item.key)
             }
         }
     }

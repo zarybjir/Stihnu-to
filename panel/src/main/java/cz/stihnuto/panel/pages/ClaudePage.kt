@@ -191,7 +191,7 @@ class ClaudePage(ctx: Context) : Page(ctx) {
         status.text = "Hledám tipy na Kudyznudy…"
         cz.stihnuto.panel.VoiceWake.pause(true)
         app.io.execute {
-            val prompt = try {
+            val (instruction, page) = try {
                 val html = cz.stihnuto.panel.Http.text(
                     "https://www.kudyznudy.cz/kalendar-akci/akce-pro-deti/${app.settings.kznRegion}")
                 val text = html
@@ -199,12 +199,14 @@ class ClaudePage(ctx: Context) : Page(ctx) {
                     .replace(Regex("(?s)<style.*?</style>"), " ")
                     .replace(Regex("<[^>]+>"), " ")
                     .replace(Regex("\\s+"), " ").trim().take(9000)
-                "Tohle je obsah stránky Kudyznudy s akcemi pro děti. Vyber 3 až 5 akcí vhodných pro rodinu " +
-                    "s dětmi na tento víkend a stručně je řekni (název, kdy a kde). Česky, krátce, bez odkazů. Obsah:\n" + text
+                ("V podkladu je obsah stránky Kudyznudy s akcemi pro děti. Vyber 3 až 5 akcí vhodných pro rodinu " +
+                    "s dětmi na tento víkend a stručně je řekni (název, kdy a kde). Česky, krátce, bez odkazů.") to text
             } catch (e: Exception) {
-                "Nepodařilo se načíst akce z Kudyznudy. Řekni 3 obecné tipy, co dělat s dětmi o víkendu v Praze."
+                "Nepodařilo se načíst akce z Kudyznudy. Řekni 3 obecné tipy, co dělat s dětmi o víkendu v Praze." to ""
             }
-            assistant(app).ask(prompt) { reply ->
+            // Text z webu jde asistentovi bez nástrojů a mimo rozhovor — stránka tak nemůže
+            // hodinám nic „přikázat“ (zatopit, pustit hudbu, přidat na nákup).
+            assistant(app).askAboutText(instruction, page) { reply ->
                 cz.stihnuto.panel.VoiceWake.pause(false)
                 app.main.post { answer.text = reply; idle(); speak(reply) }
             }
@@ -265,6 +267,14 @@ class ClaudePage(ctx: Context) : Page(ctx) {
     override fun onHide() {
         recognizer?.destroy(); recognizer = null
         // TTS zůstává — odpověď na hlasový povel se má přečíst i po přepnutí okna
+    }
+
+    override fun onDestroy() {
+        recognizer?.destroy(); recognizer = null
+        // jinak by po každé změně nastavení zůstalo viset další spojení s hlasovým enginem
+        try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
+        tts = null
+        ttsReady = false
     }
 
     companion object {

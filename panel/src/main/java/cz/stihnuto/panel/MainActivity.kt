@@ -87,6 +87,7 @@ class MainActivity : Activity() {
 
     private fun buildPages() {
         pages[ids.getOrNull(index)]?.onHide()
+        pages.values.forEach { it.onDestroy() }
         pager.removeAllViews()
         pages.clear()
         ids = app.settings.pageList().filter { it in Pages.all }.ifEmpty { listOf("clock") }
@@ -192,6 +193,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         app.navigator = null
         app.main.removeCallbacks(idleReturn)
+        pages.values.forEach { it.onDestroy() }
         super.onDestroy()
     }
 

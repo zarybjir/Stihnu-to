@@ -30,6 +30,14 @@ class Settings(ctx: Context) {
     var tapoUser: String by str("tapo_user", "")
     var tapoPass: String by str("tapo_pass", "")
     var hubIp: String by str("hub_ip", "10.0.0.139")
+    /**
+     * Hub už jednou prokázal, že umí zabezpečený protokol KLAP. Od té chvíle se starší
+     * přihlášení (které posílá heslo protistraně) nezkouší — jinak by šlo podvrženým
+     * „hubem" heslo vylákat. Vynuluje se jen novým přihlášením přímo na hodinách.
+     */
+    var hubKlap: Boolean
+        get() = p.getBoolean("hub_klap", false)
+        set(v) { p.edit().putBoolean("hub_klap", v).apply() }
     var heatStep: Double by dbl("heat_step", 0.5)
     /** Scény topení: {"Doma": {"<id hlavice>": 21.0, "*": 21.0}, …}; "*" = výchozí pro ostatní. */
     var heatScenes: String by str("heat_scenes", "")

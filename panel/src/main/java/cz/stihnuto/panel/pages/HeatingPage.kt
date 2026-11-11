@@ -92,23 +92,6 @@ class HeatingPage(ctx: Context) : Page(ctx) {
         }
     }
 
-    private var cloudLog = ""
-
-    /** Zkouška ovládání přes cloud TP-Link (mimo domácí síť). */
-    private fun cloudTest() {
-        cloudLog = "Zkouším cloud TP-Link…"
-        render()
-        val s = app.settings
-        app.io.execute {
-            val out = try {
-                cz.stihnuto.panel.tapo.TapoCloud(s.tapoUser.trim(), s.tapoPass).test()
-            } catch (e: Exception) {
-                "chyba: ${e.message}"
-            }
-            app.main.post { cloudLog = out; render() }
-        }
-    }
-
     private var showForm = false
 
     /** Přihlášení k hubu přímo na hodinách (klávesnice HeliBoard z okna Aplikace). */
@@ -135,9 +118,17 @@ class HeatingPage(ctx: Context) : Page(ctx) {
         val lp = { LinearLayout.LayoutParams(-1, -2).apply { topMargin = (u * 2).toInt() } }
         col.addView(ip, lp()); col.addView(user, lp()); col.addView(pass, lp())
         col.addView(Ui.button(ctx, "Uložit a připojit", u * 5, Ui.PRIMARY, Ui.BG) {
-            s.hubIp = ip.text.toString().trim()
+            val newIp = ip.text.toString().trim()
+            if (!cz.stihnuto.panel.tapo.TapoHub.isHomeAddress(newIp)) {
+                android.widget.Toast.makeText(ctx, "Zadej IP adresu hubu v domácí síti, např. 10.0.0.139",
+                    android.widget.Toast.LENGTH_LONG).show()
+                return@button
+            }
+            s.hubIp = newIp
             s.tapoUser = user.text.toString().trim()
             if (pass.text.isNotEmpty()) s.tapoPass = pass.text.toString()
+            // přihlášení přímo na hodinách smí znovu zjistit, jaký protokol hub umí
+            s.hubKlap = false
             (ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
                 .hideSoftInputFromWindow(pass.windowToken, 0)
             showForm = false

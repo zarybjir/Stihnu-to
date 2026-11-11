@@ -40,8 +40,29 @@ curl -d '{"app":"youtube_music","search":"Lucie"}' http://<ip-hodin>:8080/api/op
 curl -d '{"text":"Kde se teď topí?"}' http://<ip-hodin>:8080/api/ask      # zeptat se Clauda na hodinách
 ```
 
+Všechno, co něco mění (`/api/page`, `/api/heating`, `/api/media`, `/api/play`,
+`/api/open`, `/api/ask`), bere jen **POST** — tak, jak to dělá `curl -d` výše.
+
+### Zabezpečení
+
 API ani nastavení nemají heslo — patří jen do domácí sítě, nikdy je nevystavuj
-do internetu.
+do internetu (žádné přesměrování portu 8080 na routeru). Kdokoli v domácí síti
+může panel ovládat a měnit nastavení; uložené klíče a heslo ale stránka nikdy
+nezobrazí.
+
+Proti útoku z webové stránky, kterou si někdo otevře na jiném zařízení v téže
+síti, se server brání sám:
+
+- odpovědi nemají `Access-Control-Allow-Origin`, takže je cizí stránka nepřečte,
+- změny jdou jen metodou POST (nejde je vyvolat obrázkem ani odkazem),
+- POST z prohlížeče musí přijít ze stránky panelu (kontrola `Origin`/`Referer`);
+  skripty a `curl` tuhle hlavičku neposílají a fungují dál,
+- adresa v hlavičce `Host` musí být IP nebo místní jméno (ochrana proti „DNS rebinding“).
+
+Hub topení musí mít IP adresu z domácí sítě a hodiny s ním mluví zabezpečeným
+protokolem KLAP, u kterého heslo neopouští hodiny. Jakmile ho hub jednou použil,
+na starší protokol (který heslo posílá protistraně) se už nepřepne — leda po novém
+přihlášení přímo na displeji hodin.
 
 ## Claude
 

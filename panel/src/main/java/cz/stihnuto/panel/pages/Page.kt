@@ -19,6 +19,9 @@ abstract class Page(val ctx: Context) {
 
     /** Okno zmizelo — přestaň obnovovat, uvolni paměť. */
     open fun onHide() {}
+
+    /** Okno se zahazuje (přestavba oken po změně nastavení) — uvolni, co drží systémové služby. */
+    open fun onDestroy() {}
 }
 
 object Pages {

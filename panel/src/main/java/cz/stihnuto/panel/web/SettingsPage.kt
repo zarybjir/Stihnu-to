@@ -5,7 +5,10 @@ import cz.stihnuto.panel.pages.Pages
 
 /** Stránka s nastavením, kterou otevřeš v prohlížeči na počítači nebo telefonu. */
 object SettingsPage {
-    private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+    private val MODEL_NAME = Regex("^[A-Za-z0-9._-]{1,80}$")
+
+    private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace("\"", "&quot;").replace("'", "&#39;")
 
     fun render(app: App): String {
         val s = app.settings
@@ -61,7 +64,7 @@ ${field("idle_minutes", "Návrat na domovské okno po (min, 0 = nikdy)", s.idleM
 ${field("radar_url", "Radar — vlastní webová adresa (nepovinné)", s.radarUrl, "Prázdné = vestavěný radar. Jinak třeba stránka ČHMÚ nebo Windy.")}
 
 <h2>Topení (Tapo)</h2>
-${field("hub_ip", "IP adresa hubu H100", s.hubIp, "Najdeš v aplikaci Tapo → hub → ⚙ → Informace o zařízení. V routeru jí nastav pevnou IP.")}
+${field("hub_ip", "IP adresa hubu H100", s.hubIp, "Najdeš v aplikaci Tapo → hub → ⚙ → Informace o zařízení. V routeru jí nastav pevnou IP. Jen adresa v domácí síti (např. 10.0.0.139) — jiná se neuloží.")}
 ${field("tapo_user", "E-mail k účtu Tapo", s.tapoUser)}
 ${secret("tapo_pass", "Heslo k účtu Tapo", s.tapoPass.isNotEmpty(), "V aplikaci Tapo zapni: Já → Tapo Lab → Kompatibilita s třetími stranami.")}
 ${field("heat_step", "Krok tlačítek −/+ (°C)", s.heatStep.toString())}
@@ -146,17 +149,22 @@ fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body
         }
         f["home_page"]?.trim()?.takeIf { it in Pages.all }?.let { s.homePage = it }
         f["idle_minutes"]?.toIntOrNull()?.let { s.idleMinutes = it.coerceIn(0, 600) }
-        f["radar_url"]?.let { s.radarUrl = it.trim() }
+        // radar: jen webová adresa (nebo nic) — nic jiného se do prohlížeče v hodinách nepustí
+        f["radar_url"]?.trim()?.takeIf { it.isEmpty() || it.startsWith("http://") || it.startsWith("https://") }
+            ?.let { s.radarUrl = it }
         f["calendar_urls"]?.let { s.calendarUrls = it.trim() }
-        f["hub_ip"]?.let { s.hubIp = it.trim() }
+        // hub: jen IP adresa v domácí síti (přihlašovací údaje nejde přesměrovat jinam)
+        f["hub_ip"]?.trim()?.takeIf { it.isEmpty() || cz.stihnuto.panel.tapo.TapoHub.isHomeAddress(it) }
+            ?.let { s.hubIp = it }
         f["tapo_user"]?.let { s.tapoUser = it.trim() }
         f["tapo_pass"]?.takeIf { it.isNotEmpty() }?.let { s.tapoPass = it }
         f["heat_step"]?.replace(',', '.')?.toDoubleOrNull()?.let { s.heatStep = it.coerceIn(0.5, 5.0) }
         f["ai_provider"]?.takeIf { it == "claude" || it == "gemini" }?.let { s.aiProvider = it }
         f["gemini_key"]?.takeIf { it.isNotBlank() }?.let { s.geminiKey = it.trim() }
-        f["gemini_model"]?.trim()?.takeIf { it.isNotEmpty() }?.let { s.geminiModel = it }
+        // název modelu jde do adresy dotazu — jen písmena, číslice, tečka, pomlčka, podtržítko
+        f["gemini_model"]?.trim()?.takeIf { MODEL_NAME.matches(it) }?.let { s.geminiModel = it }
         f["anthropic_key"]?.takeIf { it.isNotBlank() }?.let { s.anthropicKey = it.trim() }
-        f["claude_model"]?.trim()?.takeIf { it.isNotEmpty() }?.let { s.claudeModel = it }
+        f["claude_model"]?.trim()?.takeIf { MODEL_NAME.matches(it) }?.let { s.claudeModel = it }
         f["night_from"]?.toIntOrNull()?.let { s.nightFrom = it.coerceIn(0, 23) }
         f["night_to"]?.toIntOrNull()?.let { s.nightTo = it.coerceIn(0, 23) }
         f["day_brightness"]?.toIntOrNull()?.let { s.dayBrightness = it.coerceIn(0, 100) }

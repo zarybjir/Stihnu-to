@@ -39,11 +39,15 @@ object Ics {
         for (r in raws) {
             val rid = r.get("RECURRENCE-ID") ?: continue
             val uid = r.get("UID")?.value ?: continue
-            overridden.getOrPut(uid) { mutableSetOf() } += toLocal(rid, zone).first
+            try {
+                overridden.getOrPut(uid) { mutableSetOf() } += toLocal(rid, zone).first
+            } catch (e: Exception) {
+                // nečitelný čas — záznam přeskočit
+            }
         }
 
         val out = mutableListOf<CalEvent>()
-        for (r in raws) {
+        for (r in raws) try {
             if (r.get("STATUS")?.value.equals("CANCELLED", true)) continue
             val dtStart = r.get("DTSTART") ?: continue
             val (start, allDay) = toLocal(dtStart, zone)
@@ -68,6 +72,8 @@ object Ics {
                     out += CalEvent(title, s, e, allDay, location)
                 }
             }
+        } catch (e: Exception) {
+            // jedna vadná událost (nečitelné datum apod.) nesmí shodit celý kalendář — přeskočit
         }
         return out.sortedWith(compareBy({ it.start.toLocalDate() }, { !it.allDay }, { it.start }))
     }

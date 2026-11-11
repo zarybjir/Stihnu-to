@@ -43,8 +43,23 @@ class TapoException(msg: String, val code: Int = 0) : IOException(msg)
  * Tapo zařízení používají dva šifrované protokoly — novější „KLAP" a starší
  * „AES" (výměna RSA klíčů). Zkusí se KLAP a když ho hub nezná, AES.
  * Postup odpovídá knihovně python-kasa.
+ *
+ * Bezpečnost: u KLAP se heslo nikam neposílá (obě strany jen prokážou, že ho znají),
+ * kdežto starší AES ho pošle tomu, kdo na adrese odpoví. Proto:
+ *  - adresa hubu musí být IP v domácí síti (údaje nejde přesměrovat ven),
+ *  - jakmile hub jednou KLAP uměl ([klapOnly]), na AES se už nikdy nepřejde.
  */
-class TapoHub(private val ip: String, private val user: String, private val pass: String) {
+class TapoHub(
+    private val ip: String,
+    private val user: String,
+    private val pass: String,
+    klapOnly: Boolean = false,
+    /** Zavolá se po prvním ověřeném spojení přes KLAP (uložit, že hub KLAP umí). */
+    private val onKlap: () -> Unit = {},
+) {
+    @Volatile private var klapOnly = klapOnly
+    /** Poslední spojení KLAP se ověřilo skutečným e-mailem a heslem (ne prázdnými údaji). */
+    private var klapVerified = false
     private var session: Session? = null
     private val terminalUuid = b64(md5(UUID.randomUUID().toString().toByteArray()))
 
@@ -144,11 +159,19 @@ class TapoHub(private val ip: String, private val user: String, private val pass
 
     private fun connect(): Session {
         if (ip.isBlank()) throw TapoException("Není nastavená IP adresa hubu")
+        // Hub je vždy v domácí síti. Jméno serveru nebo veřejná adresa se odmítne,
+        // aby přihlašovací údaje nešlo přesměrovat někam ven.
+        if (!isHomeAddress(ip)) throw TapoException("Adresa hubu musí být IP adresa v domácí síti (např. 10.0.0.139)")
         if (user.isBlank() || pass.isBlank()) throw TapoException("Chybí e-mail nebo heslo k účtu Tapo")
         try {
-            return klap()
+            return klap().also { if (klapVerified && !klapOnly) { klapOnly = true; onKlap() } }
         } catch (e: NotKlap) {
-            // starší firmware — zkusí se AES
+            // Hub, který KLAP jednou uměl, ho nepřestane umět — tohle je cizí zařízení na jeho adrese.
+            if (klapOnly) throw TapoException(
+                "Na adrese hubu neodpovídá hub (chybí zabezpečený protokol). Zkontroluj IP adresu; " +
+                    "po výměně hubu se přihlas znovu přímo na hodinách."
+            )
+            // starší firmware, který KLAP nikdy neuměl — zkusí se AES
         }
         return aes() ?: throw TapoException("Hub nepodporuje známý protokol")
     }
@@ -165,16 +188,19 @@ class TapoHub(private val ip: String, private val user: String, private val pass
         val remote = r1.body.copyOfRange(0, 16)
         val serverHash = r1.body.copyOfRange(16, 48)
 
-        // Novější firmware (v2), starší (v1). Zkusí se oboje + prázdné údaje.
-        val candidates = listOf(
+        // Novější firmware (v2), starší (v1) a prázdné údaje (hub nepřipojený k účtu).
+        // Prázdné údaje zná každý, takže by se jimi za hub mohlo vydávat libovolné zařízení
+        // v síti — zkouší se proto jen do chvíle, než se hub poprvé ověří skutečným heslem.
+        val real = listOf(
             sha256(sha1(user.toByteArray()) + sha1(pass.toByteArray())) to 2,
             md5(md5(user.toByteArray()) + md5(pass.toByteArray())) to 1,
-            sha256(sha1(ByteArray(0)) + sha1(ByteArray(0))) to 2,
         )
+        val blank = sha256(sha1(ByteArray(0)) + sha1(ByteArray(0))) to 2
+        val candidates = if (klapOnly) real else real + blank
         val (auth, ver) = candidates.firstOrNull { (h, v) ->
             val expected = if (v == 2) sha256(local + remote + h) else sha256(local + h)
             expected.contentEquals(serverHash)
-        } ?: throw TapoException(
+        }?.also { klapVerified = it !== blank } ?: throw TapoException(
             "Hub odmítl přihlášení — zkontroluj e-mail a heslo k Tapo účtu " +
                 "a v aplikaci Tapo zapni Kompatibilitu s třetími stranami."
         )
@@ -203,6 +229,8 @@ class TapoHub(private val ip: String, private val user: String, private val pass
                 val r = post("http://$ip/app/request?seq=$seq", signature + enc, cookie)
                 if (r.code == 403) throw SessionExpired()
                 if (r.code != 200) throw TapoException("HTTP ${r.code}")
+                // 32 B podpis + aspoň jeden šifrovaný blok
+                if (r.body.size < 48) throw TapoException("Hub poslal neplatnou odpověď")
                 val plain = aesCbc(Cipher.DECRYPT_MODE, key, iv, r.body.copyOfRange(32, r.body.size))
                 return JSONObject(String(plain, Charsets.UTF_8))
             }
@@ -336,4 +364,18 @@ class TapoHub(private val ip: String, private val user: String, private val pass
     private fun sha256(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b)
     private fun hex(b: ByteArray) = b.joinToString("") { "%02x".format(it) }
     private fun b64(b: ByteArray) = Base64.encodeToString(b, Base64.NO_WRAP)
+
+    companion object {
+        /**
+         * Je to IPv4 adresa z domácí sítě? (10.x, 172.16–31.x, 192.168.x, 169.254.x, 100.64–127.x)
+         * Cokoli jiného — jméno serveru, veřejná adresa, adresa s portem či cestou — neprojde.
+         */
+        fun isHomeAddress(ip: String): Boolean {
+            val m = Regex("""^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$""").matchEntire(ip) ?: return false
+            val (a, b, c, d) = m.groupValues.drop(1).map { it.toInt() }
+            if (a > 255 || b > 255 || c > 255 || d > 255) return false
+            return a == 10 || (a == 172 && b in 16..31) || (a == 192 && b == 168) ||
+                (a == 169 && b == 254) || (a == 100 && b in 64..127)
+        }
+    }
 }

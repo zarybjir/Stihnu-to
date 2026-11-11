@@ -29,7 +29,8 @@ class RadarPage(ctx: Context) : Page(ctx) {
 
     override fun onShow() {
         val url = app.settings.radarUrl.trim()
-        if (url.isNotEmpty()) showWeb(url) else showNative()
+        // jen webová adresa — nic jiného (soubory v hodinách, javascript:, intent:) se nenačte
+        if (url.startsWith("http://") || url.startsWith("https://")) showWeb(url) else showNative()
     }
 
     override fun onHide() {
@@ -43,7 +44,16 @@ class RadarPage(ctx: Context) : Page(ctx) {
         val w = WebView(ctx).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            webViewClient = WebViewClient()
+            // stránka je cizí obsah: žádný přístup k souborům aplikace, k poloze ani ven z webu
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            settings.setGeolocationEnabled(false)
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {
+                    val scheme = request.url.scheme
+                    return scheme != "http" && scheme != "https" // jiné odkazy (intent:, market:, file:) neotevírat
+                }
+            }
             setBackgroundColor(Ui.BG)
             loadUrl(url)
         }

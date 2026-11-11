@@ -454,7 +454,8 @@ object VoiceWake {
                     while (true) {
                         val e = zip.nextEntry ?: break
                         val out = File(dir, e.name)
-                        if (!out.canonicalPath.startsWith(dir.canonicalPath)) continue
+                        // jen dovnitř složky modelu („../“ ani sousední složka se stejným začátkem neprojde)
+                        if (!out.canonicalPath.startsWith(dir.canonicalPath + File.separator)) continue
                         if (e.isDirectory) { out.mkdirs(); continue }
                         out.parentFile?.mkdirs()
                         out.outputStream().use { o ->
@@ -464,6 +465,7 @@ object VoiceWake {
                                 if (n < 0) break
                                 o.write(buf, 0, n)
                                 read += n
+                                if (read > 400L * 1024 * 1024) throw java.io.IOException("archiv je podezřele velký")
                                 if (total > 0) status = "Stahuji český model… ${(100 * read / (total * 2)).coerceAtMost(99)} %"
                             }
                         }
@@ -542,7 +544,6 @@ object VoiceWake {
         })
         if (command != null) {
             awaitingCommand = false
-            Log.i("Panel", "povel: $command")
             val target = onCommand
             if (target != null) target(command) else {
                 log("okno asistenta není — ptám se na pozadí")

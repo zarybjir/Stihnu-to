@@ -206,8 +206,10 @@ class HeatingRepo(app: App) : Repo(app) {
     }
 
     private fun hub(): TapoHub = synchronized(this) {
-        hub ?: TapoHub(app.settings.hubIp.trim(), app.settings.tapoUser.trim(), app.settings.tapoPass)
-            .also { hub = it }
+        hub ?: TapoHub(
+            app.settings.hubIp.trim(), app.settings.tapoUser.trim(), app.settings.tapoPass,
+            klapOnly = app.settings.hubKlap,
+        ) { app.settings.hubKlap = true }.also { hub = it }
     }
 
     fun refresh() {
@@ -222,7 +224,12 @@ class HeatingRepo(app: App) : Repo(app) {
                 error = null
             } catch (e: Exception) {
                 Log.w("Panel", "tapo", e)
-                error = e.message ?: e.javaClass.simpleName
+                error = when (e) {
+                    // hub je ve stejné síti — když neodpovídá, je vypnutý nebo má jinou adresu
+                    is java.net.ConnectException, is java.net.SocketTimeoutException, is java.net.NoRouteToHostException ->
+                        "Hub na adrese ${app.settings.hubIp.trim()} neodpovídá. Je zapnutý? (IP se mění v Přihlášení.)"
+                    else -> e.message ?: e.javaClass.simpleName
+                }
             }
             loaded = true
             notifyChanged()
@@ -455,7 +462,7 @@ class MediaRepo(app: App) : Repo(app) {
         val pkgs = when (key) {
             "youtube" -> listOf(APPS.getValue("youtube"), APPS.getValue("newpipe"))
             "youtube_music" -> listOf(APPS.getValue("newpipe"))
-            else -> listOf(APPS[key] ?: key)
+            else -> listOf(APPS[key] ?: return false) // jen aplikace ze seznamu, žádný libovolný balíček
         }
         for (pkg in pkgs) {
             val intent = if (!query.isNullOrBlank()) {

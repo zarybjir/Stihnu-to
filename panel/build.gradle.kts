@@ -11,8 +11,8 @@ android {
         applicationId = "cz.stihnuto.panel"
         minSdk = 26
         targetSdk = 34
-        versionCode = 81
-        versionName = "0.81"
+        versionCode = 82
+        versionName = "0.82"
         ndk { abiFilters += setOf("armeabi-v7a", "arm64-v8a") }
     }
 
@@ -32,9 +32,21 @@ android {
     }
 
     buildTypes {
+        // Na hodiny jde sestavení „debug“ (kvůli stálému podpisu výše), ale nesmí být laditelné:
+        // z laditelné aplikace jde přes adb (run-as) vyčíst uložené klíče a heslo k Tapo.
+        // Neladitelný kód navíc běží rychleji.
+        debug {
+            isDebuggable = false
+        }
         release {
             isMinifyEnabled = false
         }
+    }
+
+    lint {
+        // sestavení pro hodiny je neladitelné, takže by se při každém sestavení pouštěl
+        // i dlouhý lint určený pro vydání do obchodu
+        checkReleaseBuilds = false
     }
 
     compileOptions {
