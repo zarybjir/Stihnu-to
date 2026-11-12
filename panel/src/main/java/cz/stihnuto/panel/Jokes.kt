@@ -22,8 +22,22 @@ object Jokes {
         "zab[ií]|vrah|vražd|sebevraž|krvav|mrtvol|oběs[ií]|oběšen|uškrt|zastřel|postřel|" +
         "střelb|střel[ií]|pistol|zbraň|zbran|teroris|atentát|masakr|výbuch|vybuch|mučen|" +
         "zmlát|namlát|ubod|pobod|nabod|probod|bodnu|bodák|poprav[ií]|popraven|popravč|" +
-        "utonul|utopil|utopen|válk|válečn"
+        "utonul|utopil|utopen|válk|válečn|" +
+        // narážky na pohlaví a tělo (slangová i „nevinná“ slova, která se v lechtivých vtipech opakují)
+        "(?<![a-zá-ž])hon[iíě]|onan|péro|pérem|péra(?![a-zá-ž])|pindík|pinďour|šulin|čůrák|ptáč[ek]|ptáka?(?![a-zá-ž])|" +
+        "chloub|nádobíčk|rozkrok|varle|koule(?![a-zá-ž])|kulky|prdel|zadek|zadk[uy]|kozy|kozičk|prs[ayu]?(?![a-zá-ž])|ňadr|" +
+        "bradavk|nah[áýéou](?![a-zá-ž])|nahat|svlék|svlék|svléc|svlek|kalhotk|podprsenk|tang[ay]|postel|vyspal|vyspat|" +
+        "milen[eck]|milenk|nevěr|zahýb|panic|panna|panen|těhotn|porod|orgie|kondom|gumov|vibr|tampon|menstru|" +
+        "stoj[ií] mu|postaví se mu|ztopoř|tvrd[ýé] jak|vzrušen|nadržen|líbánk|svatební noc|vagin|kunda|kundič|buchtičk|do pusy|ho do huby|lízat|lízá|kouř[ií]|" +
+        "hulí|(?<![a-zá-ž])sát|(?<![a-zá-ž])sání|cucat|cucá|strčit|strčí|zasun|vnik|nymf|děvk|štětk|coura|lehk[áé] děv|bordel|hamb|úd(?![a-zá-ž])"
     )
+
+    /**
+     * Kategorie ze zdroje vtipů. Berou se jen ty, kde se vtipy pro děti dají čekat — „Lechtivé“,
+     * „Manželství a vztahy“, „U doktora“, „Černý humor“, „Blondýnky“, „V hospodě“ apod. se přeskočí celé.
+     * Slovní filtr výše pak ještě projde i to, co zbyde.
+     */
+    private val safeCats = setOf("Pepíček", "Děti a škola", "Zvířata", "Slovní hříčky", "Technika a internet", "Jednohubky")
 
     private fun clean(t: String) = !blocked.containsMatchIn(t.lowercase())
 
@@ -51,8 +65,10 @@ object Jokes {
                 val arr = JSONObject(Http.text(URL)).optJSONArray("jokes")
                 val out = ArrayList<String>()
                 for (k in 0 until (arr?.length() ?: 0)) {
-                    val t = arr!!.optJSONArray(k)?.optString(1)?.trim()
-                    if (!t.isNullOrBlank() && t.length in 3..400 && clean(t)) out.add(t)
+                    val j = arr!!.optJSONArray(k) ?: continue
+                    val t = j.optString(1).trim()
+                    val cat = j.optString(5).trim()
+                    if (cat in safeCats && t.length in 3..400 && clean(t)) out.add(t)
                 }
                 if (out.isNotEmpty()) online = out
             } catch (e: Exception) {
