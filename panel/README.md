@@ -89,7 +89,7 @@ Pokud ho má ovládat i Claude, přidej nástroj do `claude/Assistant.kt`.
 GitHub Actions sestaví APK při každé změně v `panel/` a zveřejní ji na
 stálé adrese, odkud si ji hodiny stáhnou:
 
-    https://github.com/zarybjir/Stihnu-to/releases/download/panel-latest/panel.apk
+    https://github.com/zarybjir/Hodiny/releases/download/panel-latest/panel.apk
 
 Novou verzi pak nainstaluješ z nastavení (http://<ip-hodin>:8080 →
 Aktualizace) — hodiny ji stáhnou samy a na displeji jen potvrdíš.

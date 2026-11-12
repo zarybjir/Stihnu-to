@@ -24,7 +24,7 @@ class Installable(
  * jednou zeptá na potvrzení (a poprvé na povolení instalace z panelu).
  */
 object Updater {
-    const val URL = "https://github.com/zarybjir/Stihnu-to/releases/download/panel-latest/panel.apk"
+    const val URL = "https://github.com/zarybjir/Hodiny/releases/download/panel-latest/panel.apk"
 
     val catalog: List<Installable> by lazy {
         listOf(
