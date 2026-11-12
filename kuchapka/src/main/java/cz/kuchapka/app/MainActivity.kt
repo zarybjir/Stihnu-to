@@ -151,7 +151,7 @@ class MainActivity : Activity() {
         const val HOST = "appassets.androidplatform.net"
         const val START = "https://$HOST/web/index.html"
         private const val PICK = 7
-        const val APK_URL = "https://github.com/zarybjir/Stihnu-to/releases/download/kuchapka-latest/kuchapka.apk"
-        const val UPDATE_INFO = "https://github.com/zarybjir/Stihnu-to/releases/download/kuchapka-latest/version.txt"
+        const val APK_URL = "https://github.com/zarybjir/Kuchapka/releases/download/kuchapka-latest/kuchapka.apk"
+        const val UPDATE_INFO = "https://github.com/zarybjir/Kuchapka/releases/download/kuchapka-latest/version.txt"
     }
 }
